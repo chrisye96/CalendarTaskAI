@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../../AppData/Roaming/CalendarTask"
+		},
+		{
+			"path": "../../../AppData/Roaming/CalendarTaskAI"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
+}
