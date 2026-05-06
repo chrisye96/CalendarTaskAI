@@ -143,18 +143,26 @@ def _redacted_config() -> dict:
 def _restore_config_preserving_keys(incoming: dict) -> None:
     """Apply backup config but keep existing local API keys intact.
 
-    Backups never contain real keys (they're redacted at backup time), so
-    blindly applying `incoming` would wipe the user's keys. We merge the
-    backup over the current config and then restore the original key
-    values for any redacted entries.
+    Two invariants:
+      * API keys are never restored from a backup (the backup contains
+        REDACTED_TOKEN). Whatever the user's local config has wins.
+      * Config fields the user added AFTER the backup was made (or that
+        a newer app version added) are preserved. We start from the
+        local config and OVERLAY the non-key fields from the backup,
+        rather than starting from the backup and dropping anything not
+        in it.
     """
     from config_manager import load_config, save_config
 
     current = load_config()
-    merged = dict(incoming)
+    merged = dict(current)  # preserve every key the user already has
     for key, value in incoming.items():
-        if key.endswith("api_key") and value == REDACTED_TOKEN:
-            merged[key] = current.get(key, "")
+        # Never let a backup overwrite an api_key field, regardless of
+        # whether the backup value is REDACTED or somehow a real string
+        # (defense in depth: redaction may someday be skipped or buggy).
+        if key.endswith("api_key"):
+            continue
+        merged[key] = value
     save_config(merged)
 
 
