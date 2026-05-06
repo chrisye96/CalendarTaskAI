@@ -96,7 +96,22 @@ def start_gui() -> None:
         except Exception:
             log.exception("Startup retry failed")
 
-    # 3. Hidden Tk root for tray + windows.
+    # 3. Top up recurring rules so we always have ~12 weeks of future
+    # instances written to the calendar DB. Idempotent on a given day.
+    try:
+        from recurring import extend_all
+        from calendar_db import write_tasks
+        new_instances = extend_all()
+        if new_instances:
+            log.info(
+                "Recurring extend: writing %d new instance(s) to calendar",
+                len(new_instances),
+            )
+            write_tasks(new_instances)
+    except Exception:
+        log.exception("Recurring extend failed at startup")
+
+    # 4. Hidden Tk root for tray + windows.
     root = tk.Tk()
     root.withdraw()
 
