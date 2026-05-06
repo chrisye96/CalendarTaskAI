@@ -296,6 +296,7 @@ Right-click the tray icon for:
 - **Retry Pending** - Manually retry failed requests
 - **Config** - Open config.json in editor
 - **Profile** - Open profile.md in editor
+- **Calendar view** - Open the mini calendar heatmap (6-week grid, task density colored by GitHub-style 5-stop palette; click a day for its tasks)
 - **Theme ▶** - Switch between Light, Dark, or Follow System (radio menu; checked option is the active one)
 - **Auto Start** - Toggle Windows startup
 - **Quit** - Exit the application
@@ -406,6 +407,28 @@ Tasks can be separated by:
 - `next week`, `next monday` ~ `next sunday` - Next week/day
 - `in 3 days`, `in 2 weeks` - Relative
 - `end of month` - End of month
+
+### Calendar Heatmap
+
+A 6-week × 7-day grid view, tray-launched, that colors each cell by task count:
+
+```
+Mon Tue Wed Thu Fri Sat Sun
+[ ][ ][░][░][▒][ ][ ]   ← previous month bleed-in (numbers muted)
+[░][▒][▒][▒][▓][█][░]   ← in-month days, density 0..4
+[░][░][▒][▓][█][▒][░]
+[░][░][░][▒][▒][░][ ]
+[░][▓][▒][░][░][ ][ ]
+[ ][ ][ ][ ][ ][ ][ ]
+```
+
+Five density buckets (light → dark): 0 tasks, 1-2, 3-4, 5-7, 8+. The palette stays in the macaron-blue family in both themes, with WCAG AA verified for the day-number text on every stop.
+
+- **Today's cell** has a 2px accent ring around it; the density color underneath is preserved so today's busy-ness is still visible at a glance.
+- **Out-of-month days** (the previous and next month spilling into the corners) show density too but their date number is muted so the "this month" band reads clearly.
+- **Click a cell** for a small popup of that day's tasks (✓ for done, ○ for pending). ESC closes.
+- **Header**: ◀ / ▶ for month navigation; Today button (greyed when already current month).
+- Window is theme-aware: switch theme via tray Theme ▶ and the heatmap rebuilds with the new palette on the next open.
 
 ### Theming (Light / Dark)
 
