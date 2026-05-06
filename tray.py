@@ -137,10 +137,6 @@ class TrayManager:
         # Backward-compatible alias used by _on_add_task; keeps the contract
         # of "open the window" in one place even if input_window changes.
         self.show_window_callback = input_window.show
-        # Lazily-built calendar heatmap window. Same instance is reused
-        # across opens so the user's view state (current month) persists
-        # across hide / show cycles.
-        self._calendar_window = None
         self.icon = None
         self._thread = None
         self._running = False
@@ -155,7 +151,6 @@ class TrayManager:
             pystray.MenuItem("Add Task", self._on_add_task, default=True),
             pystray.MenuItem("Add from template", self._build_templates_submenu()),
             pystray.MenuItem("Today's Tasks", self._on_show_today),
-            pystray.MenuItem("Calendar view", self._on_open_calendar),
             pystray.MenuItem(
                 "Undo last add",
                 self._on_undo_last_add,
@@ -233,26 +228,18 @@ class TrayManager:
 
         # Rebuild on the Tk thread.
         def rebuild():
-            # Input window: hide-aware destroy.
             window = getattr(self, "_input_window", None)
-            if window is not None:
-                if getattr(window, "_is_shown", False):
-                    setattr(window, "_theme_dirty", True)
-                else:
-                    try:
-                        window.destroy()
-                    except Exception:
-                        log.exception("Failed to destroy input window for theme rebuild")
-
-            # Calendar window: simpler — destroy unconditionally if it exists.
-            # The user can't be "mid-task" in the calendar view, so a yank
-            # is acceptable; next open rebuilds with the new palette.
-            cal = self._calendar_window
-            if cal is not None:
-                try:
-                    cal.destroy()
-                except Exception:
-                    log.exception("Failed to destroy calendar window for theme rebuild")
+            if window is None:
+                return
+            if getattr(window, "_is_shown", False):
+                # Don't yank a visible window. Defer rebuild to next close.
+                # Mark dirty so _close can destroy after withdraw.
+                setattr(window, "_theme_dirty", True)
+                return
+            try:
+                window.destroy()
+            except Exception:
+                log.exception("Failed to destroy input window for theme rebuild")
 
         self.root.after(0, rebuild)
 
@@ -316,23 +303,6 @@ class TrayManager:
             )
         self.root.after(0, run)
         
-    def _on_open_calendar(self, icon=None, item=None):
-        """Handle 'Calendar view' menu click.
-
-        Lazily constructs the heatmap window on first open and reuses the
-        same instance afterwards so the user's view state (current month,
-        any open day popup) persists across show / hide cycles.
-        """
-        def open_window():
-            try:
-                if self._calendar_window is None:
-                    from calendar_view import CalendarHeatmapWindow
-                    self._calendar_window = CalendarHeatmapWindow(self.root)
-                self._calendar_window.show()
-            except Exception:
-                log.exception("Failed to open calendar heatmap")
-        self.root.after(0, open_window)
-
     def _on_show_today(self, icon=None, item=None):
         """Handle 'Today's Tasks' menu click."""
         def show():

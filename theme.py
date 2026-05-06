@@ -74,20 +74,6 @@ LIGHT_THEME: dict[str, str] = {
 
     # Misc
     "star":          "#FFD54F",   # rating stars
-
-    # Heatmap density buckets for the mini-calendar view (GitHub-contributions
-    # style). Five stops: no-tasks, 1-2, 3-4, 5-7, 8+. Stay on-brand within
-    # the macaron-blue family. Stops 0-2 take the dark `fg`, stops 3-4 flip
-    # to the lighter `accent_text` for legibility.
-    "heat_0":        "#FFFFFF",   # no tasks (matches surface)
-    "heat_1":        "#DBEDF8",   # very light tint
-    "heat_2":        "#B3D9F2",   # = border
-    "heat_3":        "#89CFF0",   # = accent
-    # heat_4 must be darker than heat_3 (visual distinction) AND keep
-    # ≥4.5:1 contrast with accent_text (#2C3E50, dark navy day-number).
-    # `#69BCE0` is the sweet spot: ~0.12 luminance below heat_3 yet still
-    # bright enough that dark text reads at ~4.9:1.
-    "heat_4":        "#69BCE0",
 }
 
 
@@ -134,22 +120,6 @@ DARK_THEME: dict[str, str] = {
 
     # Misc (yellow stars work in both modes)
     "star":          "#FFD54F",
-
-    # Heatmap density buckets, dark-mode tonal variants. Stop 0 matches
-    # surface so empty days blend into the page; stops climb toward
-    # `#5C9DC8` (full accent) so the busiest days pop against the dark
-    # window without glowing. Day-number text uses `fg` on stops 0-2 and
-    # `accent_text` (dark slate) on stops 3-4 (same flip logic as light).
-    "heat_0":        "#243240",   # = surface
-    "heat_1":        "#2D4055",
-    "heat_2":        "#3A5775",   # = title_bg
-    # heat_3 and heat_4 must be bright enough that the dark `accent_text`
-    # (#1A2530) reads on them at ≥ 4.5:1. The earlier draft used the
-    # accent_dark / accent tones (#4A8AB4 / #5C9DC8) but the former only
-    # hit 3.85:1, failing AA. heat_3 promoted to the saturated-blue tone,
-    # heat_4 to a brighter sky-blue so the gradient still strictly climbs.
-    "heat_3":        "#5C9DC8",   # ~ 5.3:1 with accent_text
-    "heat_4":        "#87C5E5",   # ~ 8.2:1 with accent_text
 }
 
 
