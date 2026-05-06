@@ -26,6 +26,46 @@ def _enable_dpi_awareness() -> None:
         pass
 
 
+def _is_frozen_gui_exe() -> bool:
+    """True iff we're running as the no-console GUI exe (`CalendarTaskAI.exe`).
+
+    The bundle ships two exes from the same code (see `CalendarTaskAI.spec`):
+    `CalendarTaskAI.exe` is the GUI launcher (`console=False`), and
+    `CalendarTaskAI-cli.exe` is the console-attached variant.
+
+    Detection earlier tried `GetConsoleWindow()` to ask Windows "does this
+    process have a console the user can see?" — but that question gives
+    false positives in non-Windows-console parent shells (e.g. Git Bash
+    via winpty), where the CLI exe also has no Windows console. The
+    direct, reliable answer is to look at the exe filename: only the GUI
+    binary is named `CalendarTaskAI.exe`.
+    """
+    if not getattr(sys, "frozen", False):
+        return False
+    import os
+    exe = os.path.basename(sys.executable).lower()
+    return exe == "calendartaskai.exe"
+
+
+def _show_use_cli_exe_message(args: list[str]) -> None:
+    """Pop a Tk message box telling the user to launch CalendarTaskAI-cli.exe."""
+    import tkinter as tk
+    from tkinter import messagebox
+
+    root = tk.Tk()
+    root.withdraw()
+    arg_str = " ".join(args)
+    messagebox.showinfo(
+        "CalendarTaskAI",
+        f"You launched the GUI executable with arguments:\n\n"
+        f"    CalendarTaskAI.exe {arg_str}\n\n"
+        f"This launcher has no console attached, so command output is\n"
+        f"discarded. For CLI commands, use the sibling executable:\n\n"
+        f"    CalendarTaskAI-cli.exe {arg_str}",
+    )
+    root.destroy()
+
+
 def main() -> None:
     """Route to CLI or GUI based on arguments."""
     # Initialize logging early so even import-time errors get captured.
@@ -34,6 +74,13 @@ def main() -> None:
     log = get_logger(__name__)
 
     if len(sys.argv) > 1:
+        if _is_frozen_gui_exe():
+            # User invoked the no-console GUI exe with CLI arguments.
+            # Click's output would silently disappear; redirect them to
+            # the sibling CLI exe instead of letting them see nothing.
+            log.warning("GUI exe received CLI args %s; showing redirect message", sys.argv[1:])
+            _show_use_cli_exe_message(sys.argv[1:])
+            return
         log.debug("CLI mode invoked with %s", sys.argv[1:])
         from cli import cli
         cli()
