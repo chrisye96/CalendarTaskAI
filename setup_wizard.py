@@ -20,14 +20,18 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 import webbrowser
-from tkinter import ttk
 
 from config_manager import load_config, save_config
 from logger import get_logger
 from providers import NotConfigured, get_provider, list_providers
-from theme import LIGHT_THEME as T
+from theme import current_theme
 
 log = get_logger(__name__)
+
+# Refreshed at the top of `run_setup_wizard()` so the wizard always opens
+# with whatever theme is currently configured (including post-tray-switch).
+# All `T["..."]` references throughout this module read from this dict.
+T: dict[str, str] = current_theme()
 
 # Where each provider sends users to claim a key, and which config field
 # stores it. Order here also drives the radio order.
@@ -47,6 +51,10 @@ _PROVIDER_META = {
 
 def run_setup_wizard() -> bool:
     """Show the wizard. Blocks. Returns True if the user saved a config."""
+    # Refresh the module-level T so a tray-menu theme switch picks up on
+    # the next wizard open without an app restart.
+    global T
+    T = current_theme()
     wizard = _SetupWizard()
     wizard.run()
     return wizard.completed
