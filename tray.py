@@ -162,6 +162,7 @@ class TrayManager:
             pystray.MenuItem("Retry Pending", self._on_retry_pending),
             pystray.MenuItem("Config", self._on_open_config),
             pystray.MenuItem("Profile", self._on_open_profile),
+            pystray.MenuItem("Theme", self._build_theme_submenu()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "Auto Start",
@@ -171,6 +172,76 @@ class TrayManager:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", self._on_quit)
         )
+
+    def _build_theme_submenu(self):
+        """Three-option Theme submenu: Light / Dark / Follow System.
+
+        Each click writes the chosen value to `config["theme"]` and rebuilds
+        the input window (and any open setup wizard's next render) so the
+        new palette takes effect without an app restart.
+        """
+        def _is_choice(value):
+            try:
+                from config_manager import get_config
+                return (get_config("theme") or "system") == value
+            except Exception:
+                return value == "system"
+
+        return pystray.Menu(
+            pystray.MenuItem(
+                "Light",
+                lambda icon, item: self._on_theme_change("light"),
+                checked=lambda item: _is_choice("light"),
+                radio=True,
+            ),
+            pystray.MenuItem(
+                "Dark",
+                lambda icon, item: self._on_theme_change("dark"),
+                checked=lambda item: _is_choice("dark"),
+                radio=True,
+            ),
+            pystray.MenuItem(
+                "Follow System",
+                lambda icon, item: self._on_theme_change("system"),
+                checked=lambda item: _is_choice("system"),
+                radio=True,
+            ),
+        )
+
+    def _on_theme_change(self, value: str):
+        """Persist the new theme and rebuild the input window if it's hidden.
+
+        Live theme changes in Tkinter aren't supported by the framework
+        directly. We force a rebuild by destroying the input window's
+        underlying Tk root; the next `show()` call recreates it with
+        whatever theme is then active. If the window is currently visible,
+        we DON'T destroy it (would yank it out from under the user); the
+        switch takes effect on the next close+reopen.
+        """
+        from config_manager import set_config
+        try:
+            set_config("theme", value)
+            log.info("Theme changed to %s", value)
+        except Exception:
+            log.exception("Failed to persist theme=%s", value)
+            return
+
+        # Rebuild on the Tk thread.
+        def rebuild():
+            window = getattr(self, "_input_window", None)
+            if window is None:
+                return
+            if getattr(window, "_is_shown", False):
+                # Don't yank a visible window. Defer rebuild to next close.
+                # Mark dirty so _close can destroy after withdraw.
+                setattr(window, "_theme_dirty", True)
+                return
+            try:
+                window.destroy()
+            except Exception:
+                log.exception("Failed to destroy input window for theme rebuild")
+
+        self.root.after(0, rebuild)
 
     def _build_templates_submenu(self):
         """Build the 'Add from template' submenu.
