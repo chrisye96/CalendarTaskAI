@@ -247,22 +247,26 @@ class TestNoDate:
 
 class TestPreprocessInput:
     def test_all_resolved(self):
-        resolved, unresolved = preprocess_input("明天买菜；后天聚餐", REF)
+        resolved, unresolved, recurring = preprocess_input("明天买菜；后天聚餐", REF)
         assert unresolved == []
+        assert recurring == []
         assert {"date": "2026-05-06", "task": "买菜"} in resolved
         assert {"date": "2026-05-07", "task": "聚餐"} in resolved
 
     def test_mixed_resolved_and_unresolved(self):
-        resolved, unresolved = preprocess_input("明天买菜；写报告初稿", REF)
+        resolved, unresolved, recurring = preprocess_input("明天买菜；写报告初稿", REF)
         assert resolved == [{"date": "2026-05-06", "task": "买菜"}]
         assert unresolved == ["写报告初稿"]
+        assert recurring == []
 
     def test_all_unresolved(self):
-        resolved, unresolved = preprocess_input("写报告初稿；准备演讲材料", REF)
+        resolved, unresolved, recurring = preprocess_input("写报告初稿；准备演讲材料", REF)
         assert resolved == []
         assert sorted(unresolved) == ["写报告初稿", "准备演讲材料"]
+        assert recurring == []
 
     def test_full_date_with_year(self):
-        resolved, unresolved = preprocess_input("2026年12月1日 体检", REF)
+        resolved, unresolved, recurring = preprocess_input("2026年12月1日 体检", REF)
         assert resolved == [{"date": "2026-12-01", "task": "体检"}]
         assert unresolved == []
+        assert recurring == []

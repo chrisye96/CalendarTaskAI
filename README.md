@@ -404,6 +404,30 @@ Tasks can be separated by:
 - `in 3 days`, `in 2 weeks` - Relative
 - `end of month` - End of month
 
+### Recurring Tasks
+
+Type a recurring pattern and CalendarTaskAI parses it deterministically, expands the next ~12 weeks of instances, and stores the rule for periodic top-up so the calendar always has 12 weeks of future instances pre-written.
+
+Recognized patterns:
+
+| You type | What gets scheduled |
+|----------|---------------------|
+| `每周一 健身房` | "健身房" every Monday for the next 12 weeks |
+| `每周一三五 健身` | "健身" on every Mon / Wed / Fri |
+| `每周一、三、五 健身` | same, comma-separated |
+| `每周三 上午10-11点 团队会议` | `[10:00-11:00] 团队会议` every Wednesday |
+| `每月15号 交房租` | "交房租" on the 15th of every month |
+| `每月1日 报销` | "报销" on the 1st |
+| `every monday 9am standup` | `[09:00] standup` every Monday |
+| `every fri team review` | "team review" every Friday |
+
+Properties:
+- **Pre-expanded** to ~12 weeks ahead. New instances appear in the confirm view alongside one-shot tasks; you can cancel the whole batch.
+- **Rules saved on confirm only.** The rule isn't recorded to `data/recurring.json` until you click Confirm — cancelled inputs leave no trace.
+- **Top-up at startup.** Each app launch re-expands rules so the rolling 12-week window stays full. Idempotent on a given day; running the app twice doesn't double-write tasks.
+- **Time-of-day works in rule body.** The rule body is run through the time parser, so `每周一 9点 standup` produces instances with `[09:00]` prefix.
+- **Out of scope (for now):** biweekly, ranges across days (`每月1-15号`), `every other Tuesday`. Ask for these if you'd actually use them.
+
 ### Supported Time-of-Day Formats
 
 Tasks can include a time hint that gets prefixed onto the task text as `[HH:MM]` (single time) or `[HH:MM-HH:MM]` (range). DesktopCal displays the prefix verbatim.

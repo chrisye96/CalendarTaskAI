@@ -158,11 +158,20 @@ def analyze_tasks(
     *,
     force_high_quality: bool = False,
     provider_override: str | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     """High-level entry point: split input, resolve dates deterministically,
     only call the LLM for the leftovers.
 
-    Routing rules:
+    Returns `(allocations, pending_recurring_rules)`:
+
+      * `allocations`: full list of `{date, task}` to surface in the
+        confirm view. Includes deterministic date matches, expanded
+        recurring instances, and LLM date assignments.
+      * `pending_recurring_rules`: rule dicts the caller must register
+        via `recurring.register_rule` AFTER user confirmation. Empty
+        when no recurring patterns appeared in the input.
+
+    Routing rules (unchanged from PR #3):
       * `provider_override` (set by the UI's "Re-run with X" buttons) takes
         precedence and disables the cross-provider auto-fallback below — when
         the user explicitly picks a provider, errors should surface, not be
@@ -175,14 +184,6 @@ def analyze_tasks(
         user's explicit "Re-run with Pro" button.
       * `force_high_quality` makes the chosen provider use its higher tier
         (DeepSeek pro). Gemini ignores the flag (no tier).
-
-    Args:
-        user_input: raw text from the user.
-        config: app config dict (`load_config()`).
-        force_high_quality: route to the higher-tier model on a tiered
-            provider (DeepSeek). Wired to the "Re-run with Pro" button.
-        provider_override: optional "gemini" / "deepseek" to bypass
-            `llm_provider`. Wired to the manual re-run buttons.
     """
     from task_parser import preprocess_input
     from profile_manager import load_profile
@@ -191,12 +192,15 @@ def analyze_tasks(
     from providers import NotConfigured, get_provider
 
     # Step 1: regex-based preprocessing
-    resolved, unresolved = preprocess_input(user_input)
-    log.info("preprocess: %d resolved, %d unresolved", len(resolved), len(unresolved))
+    resolved, unresolved, pending_recurring = preprocess_input(user_input)
+    log.info(
+        "preprocess: %d resolved, %d unresolved, %d recurring rule(s)",
+        len(resolved), len(unresolved), len(pending_recurring),
+    )
 
     # Step 2: short-circuit if everything was resolvable by rules
     if not unresolved:
-        return resolved
+        return resolved, pending_recurring
 
     # Step 3: only the leftovers go to the LLM
     profile_text = load_profile()
@@ -257,4 +261,4 @@ def analyze_tasks(
             raise
 
     log.info("Provider returned %d allocations", len(ai_results))
-    return resolved + ai_results
+    return resolved + ai_results, pending_recurring
