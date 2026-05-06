@@ -42,6 +42,22 @@ class TestPaletteShape:
         ratio = _contrast(theme.DARK_THEME["accent_text"], theme.DARK_THEME["accent"])
         assert ratio >= 4.5, f"dark accent_text/accent contrast = {ratio:.2f}"
 
+    def test_light_accent_button_text_passes_contrast(self):
+        # Symmetric check on light mode. White-on-baby-blue (the original
+        # design) gave only ~1.7:1; the fix is dark navy on the same blue.
+        ratio = _contrast(theme.LIGHT_THEME["accent_text"], theme.LIGHT_THEME["accent"])
+        assert ratio >= 4.5, f"light accent_text/accent contrast = {ratio:.2f}"
+
+    def test_light_success_button_text_passes_contrast(self):
+        # The is_success button in ui.py uses ACCENT_TEXT on the success
+        # background. Verify both halves of that pairing work.
+        ratio = _contrast(theme.LIGHT_THEME["accent_text"], theme.LIGHT_THEME["success"])
+        assert ratio >= 4.5, f"light accent_text/success contrast = {ratio:.2f}"
+
+    def test_dark_success_button_text_passes_contrast(self):
+        ratio = _contrast(theme.DARK_THEME["accent_text"], theme.DARK_THEME["success"])
+        assert ratio >= 4.5, f"dark accent_text/success contrast = {ratio:.2f}"
+
     def test_light_text_passes_aa_contrast_on_light_bg(self):
         ratio = _contrast(theme.LIGHT_THEME["fg"], theme.LIGHT_THEME["surface"])
         assert ratio >= 4.5, f"light fg/surface contrast = {ratio:.2f}"

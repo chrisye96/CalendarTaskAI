@@ -20,7 +20,6 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 import webbrowser
-from tkinter import ttk
 
 from config_manager import load_config, save_config
 from logger import get_logger

@@ -18,7 +18,7 @@ Why a few specific choices in the dark theme:
     and hurts macaron identity. A blue-tinted slate keeps the brand.
 
   * `accent = #5C9DC8` (desaturated baby blue) and `accent_text = #1A2530`
-    (DARK text on the accent button — flipped from light theme's white).
+    (DARK text on the accent button, flipped from light theme's white).
     White on `#5C9DC8` is ~3:1 contrast, fails WCAG AA for normal text;
     dark slate on the same blue is ~15:1 and looks correct in dark mode.
 
@@ -47,7 +47,10 @@ LIGHT_THEME: dict[str, str] = {
     "accent":        "#89CFF0",   # primary action background
     "accent_dark":   "#6BB8E0",   # primary action hover
     "accent_light":  "#D4EEFF",   # very pale accent (subtle highlights)
-    "accent_text":   "#FFFFFF",   # text on primary action
+    # Dark text on the macaron-blue / green button bg. White text on either
+    # the accent #89CFF0 (~1.7:1) or success #81C784 (~1.95:1) backgrounds
+    # fails WCAG AA; dark navy passes both (5.66:1 and 4.93:1 respectively).
+    "accent_text":   "#2C3E50",   # text on primary / success action
 
     # Button states (secondary buttons that aren't accent-colored)
     "button_hover":  "#BBDEFB",
@@ -82,13 +85,13 @@ DARK_THEME: dict[str, str] = {
     "border":        "#3D5061",   # 1 px borders / dividers
     "border_strong": "#5C9DC8",   # focused inputs, selected radio cards
 
-    # Text — primary fg ~13:1 on bg, fg_muted ~7:1, fg_subtle ~5:1 (all AA+)
+    # Text (primary fg ~13:1 on bg, fg_muted ~7:1, fg_subtle ~5:1; all AA+)
     "fg":            "#E8ECF0",   # primary
     "fg_muted":      "#A8B5C0",   # captions, helper text
     "fg_subtle":     "#8896A3",   # placeholders
     "link":          "#82B7E0",   # hyperlink, lighter blue for dark bg
 
-    # Accents — note: button TEXT is dark, not white, for AA contrast on
+    # Accents. Note: button TEXT is dark, not white, for AA contrast on
     # the desaturated accent. White on #5C9DC8 fails AA; dark on it passes.
     "accent":        "#5C9DC8",   # primary action background
     "accent_dark":   "#4A8AB4",   # primary action hover
@@ -107,7 +110,7 @@ DARK_THEME: dict[str, str] = {
     "error":         "#EF8585",
     "error_bg":      "#3E1F1F",
 
-    # Title bar — deeper navy keeps brand color but doesn't glow on dark
+    # Title bar. Deeper navy keeps brand color but doesn't glow on dark
     "title_bg":      "#3A5775",
     "title_fg":      "#FFFFFF",
 
@@ -115,7 +118,7 @@ DARK_THEME: dict[str, str] = {
     "disabled_bg":   "#2A3540",
     "disabled_fg":   "#5A6770",
 
-    # Misc — yellow stars work in both modes
+    # Misc (yellow stars work in both modes)
     "star":          "#FFD54F",
 }
 
@@ -148,7 +151,7 @@ def resolve_effective_theme(setting: str | None = None) -> str:
     """Convert a `theme` config value into the concrete theme to apply.
 
     `setting` is one of "light", "dark", "system", or None (treated as
-    "system"). Returns "light" or "dark" — never "system".
+    "system"). Returns "light" or "dark" (never "system").
     """
     if setting in ("light", "dark"):
         return setting

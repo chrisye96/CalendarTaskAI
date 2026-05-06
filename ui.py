@@ -1,10 +1,14 @@
-"""Tkinter floating window UI for CalendarTaskAI - Macaron Light Blue Theme."""
+"""Tkinter floating window UI for CalendarTaskAI.
+
+Theme tokens (light or dark) are loaded per instance from `theme.current_theme()`
+and refreshed on every (re)build of the widget tree, so a tray-driven theme
+switch takes effect on the next time the window is opened.
+"""
 import os
 import subprocess
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
 
 from logger import get_logger
 
@@ -508,7 +512,7 @@ class TaskInputWindow:
 
         # Manual re-run buttons. Both target DeepSeek (the alternative
         # provider). Visibility is driven by `deepseek_api_key` being set,
-        # not by the active provider — so users on Gemini can escalate, and
+        # not by the active provider, so users on Gemini can escalate, and
         # users already on DeepSeek can still re-attempt or escalate to pro.
         # Packed in _sync_rerun_buttons_visibility.
         self.rerun_flash_btn = self._create_button(
@@ -896,7 +900,7 @@ class TaskInputWindow:
     def _sync_rerun_buttons_visibility(self) -> None:
         """Pack/forget both DeepSeek re-run buttons based on whether the user
         has a DeepSeek key configured. Visibility is *not* tied to which
-        provider is currently the default — even Gemini-default users get
+        provider is currently the default; even Gemini-default users get
         these escape hatches once DeepSeek is set up.
         """
         try:
