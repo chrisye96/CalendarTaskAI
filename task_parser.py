@@ -511,31 +511,40 @@ def _try_pattern(text: str, pattern: str, extractor, position: str, reference: d
 
 def preprocess_input(raw_input: str, reference_date: date = None) -> tuple[list[dict], list[str]]:
     """Preprocess user input using deterministic rules.
-    
-    Main entry point for the deterministic task parser.
-    Splits input into tasks, extracts dates using regex/rules.
-    
+
+    Pipeline per task:
+        split → extract_date → extract_time → reassemble with [HH:MM] prefix
+
     Args:
-        raw_input: Raw user input containing one or more tasks
-        reference_date: Reference date for relative calculations (defaults to today)
-    
+        raw_input: Raw user input containing one or more tasks.
+        reference_date: Reference date for relative date calculations
+            (defaults to today).
+
     Returns:
-        Tuple of (resolved, unresolved):
-        - resolved: list of {"date": "YYYY-MM-DD", "task": "cleaned text"} 
-                    - tasks with dates successfully extracted by rules
-        - unresolved: list of task text strings
-                    - tasks needing LLM for date assignment
+        (resolved, unresolved). Each `resolved` task has its date pinned;
+        `unresolved` tasks still need the LLM for date assignment but their
+        time prefix (if any) is already attached.
     """
+    from time_parser import extract_time
+
     tasks = split_tasks(raw_input)
     resolved = []
     unresolved = []
-    
+
     for task in tasks:
-        date_str, clean_text = extract_date(task, reference_date)
-        if date_str and clean_text:
-            resolved.append({"date": date_str, "task": clean_text})
-        elif clean_text:  # No date found but has content
-            unresolved.append(clean_text)
-        # Skip if clean_text is empty
-    
+        date_str, after_date = extract_date(task, reference_date)
+        time_prefix, after_time = extract_time(after_date)
+
+        text = after_time.strip()
+        if time_prefix:
+            text = f"{time_prefix} {text}".strip()
+
+        if not text:
+            continue
+
+        if date_str:
+            resolved.append({"date": date_str, "task": text})
+        else:
+            unresolved.append(text)
+
     return resolved, unresolved
