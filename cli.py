@@ -247,6 +247,41 @@ def today():
     ctx.invoke(list_tasks, date_arg="today")
 
 
+@cli.command(name="next")
+@click.argument("days", type=click.IntRange(1, 365), default=7)
+def next_(days):
+    """Show tasks for the next N days (default 7).
+
+    Includes today and the next N-1 days. Like `list this-week` but with a
+    user-supplied window.
+    """
+    from calendar_db import get_tasks_in_range
+
+    today_d = date.today()
+    end_d = today_d + timedelta(days=days - 1)
+
+    try:
+        tasks_by_date = get_tasks_in_range(today_d.isoformat(), end_d.isoformat())
+    except Exception as e:
+        click.echo(click.style(f"Database Error: {e}", fg="red"))
+        return
+
+    if not tasks_by_date:
+        click.echo(f"No tasks in the next {days} day(s).")
+        return
+
+    click.echo(click.style(
+        f"Tasks for the next {days} day(s) ({today_d} to {end_d}):", fg="cyan"
+    ))
+
+    for date_str in sorted(tasks_by_date.keys()):
+        click.echo(click.style(f"\n{date_str}", fg="cyan", bold=True))
+        for task in tasks_by_date[date_str]:
+            checkbox = "[x]" if task["done"] else "[ ]"
+            color = "green" if task["done"] else None
+            click.echo(click.style(f"  {checkbox} {task['text']}", fg=color))
+
+
 @cli.command()
 @click.argument("keyword")
 def done(keyword):
@@ -435,6 +470,81 @@ def export(fmt, start_date, end_date):
         click.echo(output)
     except Exception as e:
         click.echo(click.style(f"Error: {e}", fg="red"))
+
+
+@cli.command()
+@click.option("--out", "out_file", help="Output path. Defaults to ./calendartaskai-backup-YYYY-MM-DD.json")
+def backup(out_file):
+    """Export config (API keys redacted), profile, history, templates,
+    recurring rules, and ±1 year of tasks to a JSON file.
+    """
+    import json
+    from backup import create_backup
+
+    if not out_file:
+        out_file = f"calendartaskai-backup-{date.today().isoformat()}.json"
+
+    try:
+        data = create_backup()
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        click.echo(click.style(f"Backup failed: {e}", fg="red"))
+        return
+
+    click.echo(click.style(f"Backup written: {out_file}", fg="green"))
+
+
+@cli.command()
+@click.argument("path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--overwrite-config", is_flag=True,
+              help="Also overwrite non-key config fields. API keys are kept as-is.")
+def restore(path, overwrite_config):
+    """Restore from a backup JSON file.
+
+    Profile, history, templates, and recurring rules are OVERWRITTEN.
+    Tasks are APPENDED to the calendar (duplicates may result if the DB
+    already had matching entries). Config API keys are never replaced.
+    """
+    import json
+    from backup import restore_backup
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    click.echo(f"Backup created: {data.get('created_at', '?')} (app v{data.get('app_version', '?')})")
+    if not click.confirm(
+        "This will overwrite local profile/history/templates/recurring and append "
+        "stored tasks to the calendar. Continue?",
+        default=False,
+    ):
+        click.echo("Restore cancelled.")
+        return
+
+    try:
+        counts = restore_backup(data, overwrite_config=overwrite_config)
+    except Exception as e:
+        click.echo(click.style(f"Restore failed: {e}", fg="red"))
+        return
+
+    click.echo(click.style("Restore complete:", fg="green"))
+    for k, v in counts.items():
+        click.echo(f"  {k}: {v}")
+
+
+@cli.command()
+def undo():
+    """Undo the most recent batch of tasks added.
+
+    Reverses exactly the last `add` (whether from CLI or GUI). Tasks are
+    matched by date + exact text; tasks marked done since the original add
+    are still removed.
+    """
+    from last_op import undo_last_add
+
+    count, message = undo_last_add()
+    fg = "green" if count else "yellow"
+    click.echo(click.style(message, fg=fg))
 
 
 @cli.command()
