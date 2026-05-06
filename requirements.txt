@@ -1,0 +1,8 @@
+# Runtime dependencies for CalendarTaskAI.
+# Versions are pinned to a major-version range so reproducible installs are
+# possible without locking out small bug-fix releases.
+click>=8.0,<9.0
+google-genai>=1.0,<2.0
+keyboard>=0.13,<1.0
+pillow>=11.0,<14.0
+pystray>=0.19,<1.0

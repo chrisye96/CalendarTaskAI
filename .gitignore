@@ -173,9 +173,23 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Cursor  
-#  Cursor is an AI-powered code editor.`.cursorignore` specifies files/directories to 
+# Cursor
+#  Cursor is an AI-powered code editor.`.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# CalendarTaskAI: project-specific ignores
+# Runtime data lives under %APPDATA%\CalendarTaskAI; if anyone runs the app
+# with cwd set to the repo, we still don't want these files committed.
+/data/
+/logs/
+*.log
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Internal collaboration doc, not for distribution
+PROJECT_DECISIONS.md

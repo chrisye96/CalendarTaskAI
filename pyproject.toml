@@ -1,0 +1,41 @@
+# Project metadata + tool config. Not currently published to PyPI; this file
+# exists so editors, type checkers, and pytest pick up consistent settings.
+[project]
+name = "calendartaskai"
+version = "0.2.0"
+description = "AI-powered task scheduling plugin for DesktopCal"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Chris Yip" }]
+keywords = ["desktopcal", "calendar", "tasks", "ai", "gemini", "deepseek"]
+dependencies = [
+    "click>=8.0,<9.0",
+    "google-genai>=1.0,<2.0",
+    "keyboard>=0.13,<1.0",
+    "pillow>=11.0,<14.0",
+    "pystray>=0.19,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0,<9.0",
+    "pyinstaller>=6.0,<8.0",
+]
+
+[project.scripts]
+calendartaskai = "cli:cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Be lenient by default - tighten later as the codebase stabilizes.
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # line length handled by formatter
