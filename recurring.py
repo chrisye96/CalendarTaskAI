@@ -277,7 +277,7 @@ def extend_all(reference_date: date | None = None) -> list[dict]:
         return []
 
     new_instances: list[dict] = []
-    changed = False
+    extended_count = 0
 
     for rule in rules:
         last_str = rule.get("last_expanded_through")
@@ -293,10 +293,13 @@ def extend_all(reference_date: date | None = None) -> list[dict]:
             window_start = last_d + timedelta(days=1)
             new_instances.extend(expand_rule(rule, window_start, target_end))
             rule["last_expanded_through"] = target_end.isoformat()
-            changed = True
+            extended_count += 1
 
-    if changed:
+    if extended_count:
         save_rules(rules)
-        log.info("Extended %d rule(s); %d new instances", len(rules), len(new_instances))
+        log.info(
+            "Extended %d of %d rule(s); %d new instances",
+            extended_count, len(rules), len(new_instances),
+        )
 
     return new_instances
