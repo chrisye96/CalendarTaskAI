@@ -11,7 +11,7 @@ CalendarTaskAI is an intelligent task scheduling assistant that integrates with 
 ## Features
 
 - **System Tray Integration** - Runs quietly in your system tray with a global hotkey (`Ctrl+Alt+Space`) for quick task entry
-- **Macaron Light Theme UI** - Clean, modern floating window with pastel light blue theme (dark mode coming in a later release)
+- **Macaron Light + Dark Theme** - Pastel-blue light theme (default) and a coherent dark variant that keeps the brand identity through desaturation rather than simple inversion. Switch via tray menu Theme ▶ Light / Dark / Follow System.
 - **AI-Powered Task Analysis** - Pluggable LLM backend (Gemini today, DeepSeek next) for intelligent task scheduling when dates aren't explicitly specified
 - **Deterministic Date Parsing** - Regex-based parsing for explicit dates (today, tomorrow, 3月25日, next Monday, etc.) - no LLM call needed
 - **Smart Learning System** - Learns from your behavior: tracks accepted/rejected suggestions, task modifications, and satisfaction ratings
@@ -136,7 +136,8 @@ Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
   "retry_on_startup": true,
   "auto_restart_desktopcal": false,
   "request_timeout_sec": 30,
-  "rating_interval": 20
+  "rating_interval": 20,
+  "theme": "system"
 }
 ```
 
@@ -155,6 +156,7 @@ Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
 | `auto_restart_desktopcal` | **Off by default.** When on, CalendarTaskAI force-kills and restarts DesktopCal after writing tasks. Convenient but may discard unsaved state in DesktopCal's other panels. |
 | `request_timeout_sec` | Per-call LLM API timeout in seconds (default 30) |
 | `rating_interval` | Prompt for satisfaction rating every N operations |
+| `theme` | `"light"` / `"dark"` / `"system"`. `system` follows Windows's app theme via `AppsUseLightTheme`. Switch via tray menu. |
 
 ### View Current Configuration
 
@@ -294,6 +296,7 @@ Right-click the tray icon for:
 - **Retry Pending** - Manually retry failed requests
 - **Config** - Open config.json in editor
 - **Profile** - Open profile.md in editor
+- **Theme ▶** - Switch between Light, Dark, or Follow System (radio menu; checked option is the active one)
 - **Auto Start** - Toggle Windows startup
 - **Quit** - Exit the application
 
@@ -403,6 +406,23 @@ Tasks can be separated by:
 - `next week`, `next monday` ~ `next sunday` - Next week/day
 - `in 3 days`, `in 2 weeks` - Relative
 - `end of month` - End of month
+
+### Theming (Light / Dark)
+
+CalendarTaskAI ships with two color palettes:
+
+- **Light** (default): macaron baby blue accent, off-white surface
+- **Dark**: dark blue-slate surface with a desaturated baby-blue accent. Body text passes WCAG AA contrast (>4.5:1) on the dark surface; the primary action button uses dark text on a light-blue button to maintain accessibility (white-on-baby-blue would fail AA at small sizes).
+
+Switching via tray menu **Theme ▶** offers three choices:
+
+- **Light** - force the light palette, ignore system preference
+- **Dark** - force the dark palette
+- **Follow System** (default) - read the Windows registry value `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` (1=Light, 0=Dark)
+
+Switching theme rebuilds the input window the next time it's opened. If the window happens to be visible at the moment you switch, it's left intact so your work isn't yanked out from under you; the switch takes effect on the next open.
+
+The choice is persisted to `config.json` field `theme` (`"light"` / `"dark"` / `"system"`).
 
 ### Recurring Tasks
 
