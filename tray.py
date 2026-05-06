@@ -54,6 +54,16 @@ AUTOSTART_REG_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 AUTOSTART_KEY_NAME = "CalendarTaskAI"
 
 
+def _has_undoable() -> bool:
+    """True if there's a recorded last-add to undo. Used by the tray menu
+    to grey out the Undo item when nothing's available."""
+    try:
+        from last_op import peek_last
+        return peek_last() is not None
+    except Exception:
+        return False
+
+
 def get_auto_start() -> bool:
     """Check if auto-start is enabled in registry.
     
@@ -113,24 +123,41 @@ def set_auto_start(enable: bool) -> bool:
 class TrayManager:
     """Manages the system tray icon and menu."""
     
-    def __init__(self, root, show_window_callback):
+    def __init__(self, root, input_window):
         """Initialize the tray manager.
-        
+
         Args:
-            root: Tkinter root window for thread-safe callbacks
-            show_window_callback: Function to call when "Add Task" is clicked
+            root: Tkinter root window for thread-safe callbacks.
+            input_window: The TaskInputWindow instance. Tray actions call
+                `.show()` for plain "Add Task" and `.show_with_text(...)`
+                for template selections.
         """
         self.root = root
-        self.show_window_callback = show_window_callback
+        self._input_window = input_window
+        # Backward-compatible alias used by _on_add_task; keeps the contract
+        # of "open the window" in one place even if input_window changes.
+        self.show_window_callback = input_window.show
         self.icon = None
         self._thread = None
         self._running = False
         
     def _create_menu(self):
-        """Create the tray menu."""
+        """Create the tray menu.
+
+        Templates submenu is built fresh each time the menu opens so that
+        edits to data/templates.json are reflected without restarting the app.
+        """
         return pystray.Menu(
             pystray.MenuItem("Add Task", self._on_add_task, default=True),
+            pystray.MenuItem("Add from template", self._build_templates_submenu()),
             pystray.MenuItem("Today's Tasks", self._on_show_today),
+            pystray.MenuItem(
+                "Undo last add",
+                self._on_undo_last_add,
+                # Greyed out (not interactable) when nothing to undo.
+                # `enabled=` is recomputed each time the menu is opened.
+                enabled=lambda item: _has_undoable(),
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Retry Pending", self._on_retry_pending),
             pystray.MenuItem("Config", self._on_open_config),
@@ -144,10 +171,66 @@ class TrayManager:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", self._on_quit)
         )
+
+    def _build_templates_submenu(self):
+        """Build the 'Add from template' submenu.
+
+        Returns a callable so pystray re-evaluates it each open, picking up
+        any edits to data/templates.json without restarting the app.
+        """
+        def make_menu():
+            from templates import load_templates
+            try:
+                templates = load_templates()
+            except Exception:
+                log.exception("Failed to load templates")
+                templates = []
+
+            if not templates:
+                return pystray.Menu(
+                    pystray.MenuItem("(no templates configured)", None, enabled=False)
+                )
+
+            items = []
+            for tpl in templates:
+                name = tpl.get("name") or "(unnamed)"
+                text = tpl.get("text", "")
+                # `lambda` capture: bind text via default arg.
+                items.append(pystray.MenuItem(
+                    name,
+                    lambda icon, item, txt=text: self._on_template_selected(txt),
+                ))
+            return pystray.Menu(*items)
+
+        return make_menu()
+
+    def _on_template_selected(self, text: str):
+        """Open the input window with `text` pre-filled."""
+        # show_window_callback is bound to TaskInputWindow.show; we need the
+        # show_with_text variant. Stash the window via an attribute set in
+        # main.py so we can reach the right method.
+        window = getattr(self, "_input_window", None)
+        if window is not None and hasattr(window, "show_with_text"):
+            self.root.after(0, lambda: window.show_with_text(text))
+        else:
+            # Fall back to plain show if the input window wasn't registered.
+            self.root.after(0, self.show_window_callback)
         
     def _on_add_task(self, icon=None, item=None):
         """Handle 'Add Task' menu click."""
         self.root.after(0, self.show_window_callback)
+
+    def _on_undo_last_add(self, icon=None, item=None):
+        """Handle 'Undo last add' menu click."""
+        def run():
+            from tkinter import messagebox
+            from last_op import undo_last_add
+            count, msg = undo_last_add()
+            kind = "info" if count else "warning"
+            (messagebox.showinfo if count else messagebox.showwarning)(
+                "Undo", msg, parent=self.root,
+            )
+        self.root.after(0, run)
         
     def _on_show_today(self, icon=None, item=None):
         """Handle 'Today's Tasks' menu click."""
@@ -299,16 +382,20 @@ class TrayManager:
 if __name__ == "__main__":
     # Test the tray icon
     import tkinter as tk
-    
+
     root = tk.Tk()
     root.withdraw()
-    
-    def show_test():
-        print("Add Task clicked!")
-        from tkinter import messagebox
-        messagebox.showinfo("Test", "Add Task menu clicked!", parent=root)
-    
-    tray = TrayManager(root, show_test)
+
+    class _StubWindow:
+        def show(self, *_):
+            from tkinter import messagebox
+            messagebox.showinfo("Test", "Add Task menu clicked!", parent=root)
+
+        def show_with_text(self, text):
+            from tkinter import messagebox
+            messagebox.showinfo("Test", f"Template selected:\n\n{text}", parent=root)
+
+    tray = TrayManager(root, _StubWindow())
     tray.start()
     
     print("Tray icon started. Right-click to see menu.")
