@@ -476,11 +476,18 @@ class TaskInputWindow:
         )
         self.copy_btn.pack(side=tk.RIGHT)
 
-        # "Re-run with Pro" — only shown when the active provider exposes a
-        # quality tier (DeepSeek today). Created here, packed/unpacked in
-        # _show_confirm based on provider capabilities.
+        # Manual re-run buttons. Both target DeepSeek (the alternative
+        # provider). Visibility is driven by `deepseek_api_key` being set,
+        # not by the active provider — so users on Gemini can escalate, and
+        # users already on DeepSeek can still re-attempt or escalate to pro.
+        # Packed in _sync_rerun_buttons_visibility.
+        self.rerun_flash_btn = self._create_button(
+            header_row, "Re-run · DeepSeek flash", self._on_rerun_deepseek_flash
+        )
+        self._rerun_flash_visible = False
+
         self.rerun_pro_btn = self._create_button(
-            header_row, "Re-run with Pro", self._on_rerun_pro
+            header_row, "Re-run · DeepSeek Pro", self._on_rerun_deepseek_pro
         )
         self._rerun_pro_visible = False
         
@@ -788,18 +795,29 @@ class TaskInputWindow:
         # Run AI call in background thread
         threading.Thread(target=self._call_ai, args=(text,), daemon=True).start()
         
-    def _call_ai(self, text, force_high_quality: bool = False):
+    def _call_ai(
+        self,
+        text,
+        force_high_quality: bool = False,
+        provider_override: str | None = None,
+    ):
         """Call AI to analyze tasks (runs in background thread).
 
-        `force_high_quality` is True when the user clicked "Re-run with Pro"
-        and the active provider supports a smarter tier.
+        `force_high_quality` is True when the user clicked the Pro re-run
+        button. `provider_override` is set when a manual re-run button picks
+        a specific provider (bypasses the default routing and disables the
+        Gemini->DeepSeek-flash auto-fallback).
         """
         try:
             from config_manager import load_config
             from ai_client import analyze_tasks
 
             config = load_config()
-            result = analyze_tasks(text, config, force_high_quality=force_high_quality)
+            result = analyze_tasks(
+                text, config,
+                force_high_quality=force_high_quality,
+                provider_override=provider_override,
+            )
             self.root.after(0, self._show_confirm, text, result)
         except Exception as e:
             from retry_queue import save_pending
@@ -834,49 +852,70 @@ class TaskInputWindow:
         self._set_button_enabled(self.edit_btn, True)
         self._set_button_enabled(self.copy_btn, True)
 
-        # Show "Re-run with Pro" only if the active provider has a quality tier
-        self._sync_rerun_pro_visibility()
+        # Show DeepSeek re-run buttons only if DeepSeek is configured.
+        self._sync_rerun_buttons_visibility()
 
         self._show_confirm_view()
 
-    def _sync_rerun_pro_visibility(self) -> None:
-        """Pack or forget the Re-run-Pro button based on provider capability."""
+    def _sync_rerun_buttons_visibility(self) -> None:
+        """Pack/forget both DeepSeek re-run buttons based on whether the user
+        has a DeepSeek key configured. Visibility is *not* tied to which
+        provider is currently the default — even Gemini-default users get
+        these escape hatches once DeepSeek is set up.
+        """
         try:
             from config_manager import load_config
-            from providers import get_provider
-            provider = get_provider(load_config())
-            should_show = provider.supports_quality_override()
+            deepseek_ready = bool(load_config().get("deepseek_api_key", "").strip())
         except Exception:
-            should_show = False
+            deepseek_ready = False
 
-        if should_show and not self._rerun_pro_visible:
-            # Pack to the right of Copy. side=RIGHT means later packs go to
-            # the LEFT of earlier ones, so we appear next to Copy with a gap.
-            self.rerun_pro_btn.pack(side=tk.RIGHT, padx=(0, 8))
-            self._rerun_pro_visible = True
-        elif not should_show and self._rerun_pro_visible:
-            self.rerun_pro_btn.pack_forget()
-            self._rerun_pro_visible = False
+        # `side=RIGHT` packs from the right; later packs land left of earlier
+        # ones. Pack pro first so the visual order ends up Copy | flash | pro.
+        for btn_attr, vis_attr in (
+            ("rerun_pro_btn", "_rerun_pro_visible"),
+            ("rerun_flash_btn", "_rerun_flash_visible"),
+        ):
+            btn = getattr(self, btn_attr)
+            currently = getattr(self, vis_attr)
+            if deepseek_ready and not currently:
+                btn.pack(side=tk.RIGHT, padx=(0, 8))
+                setattr(self, vis_attr, True)
+            elif not deepseek_ready and currently:
+                btn.pack_forget()
+                setattr(self, vis_attr, False)
+            if getattr(self, vis_attr):
+                self._set_button_enabled(btn, True)
 
-        if self._rerun_pro_visible:
-            self._set_button_enabled(self.rerun_pro_btn, True)
+    def _on_rerun_deepseek_flash(self) -> None:
+        """Manual re-run using DeepSeek-flash (alternative model, same tier)."""
+        self._rerun(provider_override="deepseek", high_quality=False, label="DeepSeek flash")
 
-    def _on_rerun_pro(self) -> None:
-        """User asked to redo the analysis with the provider's pro/quality tier."""
+    def _on_rerun_deepseek_pro(self) -> None:
+        """Manual escalation to DeepSeek pro for genuinely complex inputs."""
+        self._rerun(provider_override="deepseek", high_quality=True, label="DeepSeek Pro")
+
+    def _rerun(self, *, provider_override: str, high_quality: bool, label: str) -> None:
         if not self._user_input or self._analyzing:
             return
 
         self._analyzing = True
-        self._set_button_enabled(self.rerun_pro_btn, False)
+        # Disable everything that could re-trigger work
+        if self._rerun_flash_visible:
+            self._set_button_enabled(self.rerun_flash_btn, False)
+        if self._rerun_pro_visible:
+            self._set_button_enabled(self.rerun_pro_btn, False)
         self._set_button_enabled(self.confirm_btn, False)
         self._set_button_enabled(self.reject_btn, False)
         self._set_button_enabled(self.edit_btn, False)
-        self.confirm_status.config(text="Re-running with Pro...", fg=self.ACCENT_COLOR)
+        self.confirm_status.config(text=f"Re-running with {label}…", fg=self.ACCENT_COLOR)
 
         threading.Thread(
             target=self._call_ai,
             args=(self._user_input,),
-            kwargs={"force_high_quality": True},
+            kwargs={
+                "force_high_quality": high_quality,
+                "provider_override": provider_override,
+            },
             daemon=True,
         ).start()
         
@@ -900,6 +939,8 @@ class TaskInputWindow:
             self._set_button_enabled(self.confirm_btn, False)
             self._set_button_enabled(self.reject_btn, False)
             self._set_button_enabled(self.edit_btn, False)
+            if self._rerun_flash_visible:
+                self._set_button_enabled(self.rerun_flash_btn, False)
             if self._rerun_pro_visible:
                 self._set_button_enabled(self.rerun_pro_btn, False)
             
@@ -951,6 +992,8 @@ class TaskInputWindow:
             self._set_button_enabled(self.confirm_btn, True)
             self._set_button_enabled(self.reject_btn, True)
             self._set_button_enabled(self.edit_btn, True)
+            if self._rerun_flash_visible:
+                self._set_button_enabled(self.rerun_flash_btn, True)
             if self._rerun_pro_visible:
                 self._set_button_enabled(self.rerun_pro_btn, True)
             self.confirm_status.config(text=f"Error: {e}", fg=self.ERROR_COLOR)
@@ -1007,7 +1050,11 @@ class TaskInputWindow:
         self._set_button_enabled(self.reject_btn, True)
         self._set_button_enabled(self.edit_btn, True)
         self._set_button_enabled(self.copy_btn, True)
-        # Hide the Re-run-Pro button on reset; _show_confirm re-syncs it next time.
+        # Hide the DeepSeek re-run buttons on reset; _show_confirm re-syncs
+        # them next time we have an AI result to display.
+        if self._rerun_flash_visible:
+            self.rerun_flash_btn.pack_forget()
+            self._rerun_flash_visible = False
         if self._rerun_pro_visible:
             self.rerun_pro_btn.pack_forget()
             self._rerun_pro_visible = False
