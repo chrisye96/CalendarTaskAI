@@ -63,12 +63,35 @@ CalendarTaskAI is an intelligent task scheduling assistant that integrates with 
 
 CalendarTaskAI is provider-agnostic. The active backend is chosen by the `llm_provider` field in `config.json`. New providers plug in by subclassing `providers.LLMProvider`.
 
-| Provider | Models used | Quality tier override |
-|----------|-------------|------------------------|
-| `gemini` | `gemini-3.1-flash-lite-preview` (configurable) | No |
-| `deepseek` | `deepseek-v4-flash` for ≤ N unresolved tasks, `deepseek-v4-pro` above the threshold | Yes — confirm view shows a "Re-run with Pro" button you can click to force the higher tier |
+### Routing model
 
-The threshold is `deepseek_pro_threshold` (default 5). The "Re-run with Pro" button only appears for providers whose `supports_quality_override()` returns `True`.
+For new users, **Gemini is the default**. DeepSeek is opt-in: configure `deepseek_api_key` and you unlock both an automatic fallback and two manual escape hatches.
+
+```
+                   ┌───────────────┐
+   user submits ─► │    Gemini     │ ── success ──► confirm view
+                   └───────┬───────┘
+                           │ on error (network, 4xx, 5xx, timeout)
+                           │ AND DeepSeek configured
+                           ▼
+                   ┌───────────────┐
+                   │ DeepSeek-flash│ ── auto fallback (no user action)
+                   └───────────────┘
+
+   confirm view buttons (visible when DeepSeek is configured):
+     [Re-run · DeepSeek flash]   alternative model, same tier
+     [Re-run · DeepSeek Pro]     escalate to the smarter tier for complex inputs
+```
+
+Properties:
+- **Pro is never automatic.** It only runs when the user clicks the Pro button, so there are no surprise charges.
+- **Manual buttons disable the auto-fallback.** When you explicitly pick a provider via the buttons, errors surface directly so you can react. Auto-fallback only applies to the default Gemini path.
+- **Default-DeepSeek users** still see both buttons in the confirm view (re-run flash for a fresh attempt, Pro to escalate).
+
+| Provider | Default model | Auto-fallback target | Tiered? |
+|----------|--------------|---------------------|---------|
+| `gemini` | `gemini-3.1-flash-lite-preview` | DeepSeek-flash (when configured) | No |
+| `deepseek` | `deepseek-v4-flash` for ≤ `deepseek_pro_threshold` tasks (default 5), `deepseek-v4-pro` above | None | Yes (manual via Pro button) |
 
 ## Configuration
 
