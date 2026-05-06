@@ -22,12 +22,17 @@ log = get_logger(__name__)
 
 
 def build_prompt(user_input: str, profile_text: str, existing_tasks: dict,
-                 history_context: str = "", behavioral_patterns: str = "") -> tuple[str, str]:
+                 history_context: str = "", behavioral_patterns: str = "",
+                 reference_date: date | None = None) -> tuple[str, str]:
     """Build the complete prompt for Gemini.
+
+    `reference_date` defaults to today; pass an explicit date for tests
+    or for callers that want the entire pipeline anchored to a fixed day
+    (e.g. avoiding midnight-crossover inconsistency).
 
     Returns (system_prompt, user_message).
     """
-    today = date.today().isoformat()
+    today = (reference_date or date.today()).isoformat()
 
     system_prompt = f"""You are an intelligent task scheduling assistant. Your job is to analyze the user's task input and assign each task to the most appropriate date.
 
@@ -158,6 +163,7 @@ def analyze_tasks(
     *,
     force_high_quality: bool = False,
     provider_override: str | None = None,
+    reference_date: date | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """High-level entry point: split input, resolve dates deterministically,
     only call the LLM for the leftovers.
@@ -191,8 +197,13 @@ def analyze_tasks(
     from history import get_recent_interactions, get_behavioral_patterns, get_feedback_summary
     from providers import NotConfigured, get_provider
 
+    # Anchor every step to a single reference date, not multiple
+    # `date.today()` calls. Otherwise a long-running call that straddles
+    # midnight could produce inconsistent dates in the output.
+    today = reference_date or date.today()
+
     # Step 1: regex-based preprocessing
-    resolved, unresolved, pending_recurring = preprocess_input(user_input)
+    resolved, unresolved, pending_recurring = preprocess_input(user_input, today)
     log.info(
         "preprocess: %d resolved, %d unresolved, %d recurring rule(s)",
         len(resolved), len(unresolved), len(pending_recurring),
@@ -204,7 +215,6 @@ def analyze_tasks(
 
     # Step 3: only the leftovers go to the LLM
     profile_text = load_profile()
-    today = date.today()
     end = today + timedelta(days=30)
     existing_tasks = get_tasks_in_range(today.isoformat(), end.isoformat())
 
@@ -223,6 +233,7 @@ def analyze_tasks(
         unresolved_text, profile_text, existing_tasks,
         history_context=history_context,
         behavioral_patterns=patterns_text,
+        reference_date=today,
     )
 
     primary_name = provider_override or config.get("llm_provider", "gemini")
