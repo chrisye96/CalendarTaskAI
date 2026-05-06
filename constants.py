@@ -29,7 +29,6 @@ DEFAULT_CONFIG = {
     # Gemini
     "gemini_api_key": "",
     "gemini_model": "gemini-3.1-flash-lite-preview",
-    "gemini_fallback_model": "gemini-2.5-flash",  # auto-used if primary returns 404
 
     # DeepSeek (endpoint and pro/flash threshold; api key empty until user configures)
     "deepseek_api_key": "",
