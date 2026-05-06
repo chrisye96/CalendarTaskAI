@@ -189,6 +189,30 @@ class TestBackup:
         with pytest.raises(ValueError, match="schema_version"):
             restore_backup({"schema_version": 99})
 
+    def test_restore_preserves_user_added_local_config_keys(self):
+        """Regression: a backup made BEFORE a config key existed must not
+        wipe that key on restore. Earlier behavior built `merged` from the
+        backup, dropping any field not in the backup (e.g. `theme` added in
+        a later app version, or any user-only field)."""
+        from backup import create_backup, restore_backup
+        from config_manager import load_config, save_config
+
+        # Backup the seeded state.
+        b = create_backup()
+
+        # User adds a new field after the backup was taken.
+        cfg = load_config()
+        cfg["my_new_local_only_field"] = "do not lose me"
+        save_config(cfg)
+
+        # Restore with overwrite_config — the previous bug would drop the
+        # new field. With the fix, we start from `current` and overlay
+        # non-key fields from the backup, so user fields survive.
+        restore_backup(b, overwrite_config=True)
+
+        cfg_after = load_config()
+        assert cfg_after.get("my_new_local_only_field") == "do not lose me"
+
 
 # ---------------------------------------------------------------------------
 # task_parser integration: time-of-day prefix attaches to resolved + unresolved
