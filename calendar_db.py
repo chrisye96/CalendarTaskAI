@@ -281,12 +281,21 @@ def write_tasks(tasks: list[dict], db_path: str = None) -> int:
             tasks_by_date[date_str] = []
         tasks_by_date[date_str].append(task["task"])
     
-    # Detect u_mid once
-    u_mid = get_user_mid(db_path)
-    
     def write():
         count = 0
         with sqlite3.connect(db_path) as conn:
+            # Read u_mid inside the same connection scope as the writes.
+            # If we read it on a separate earlier connection (the original
+            # behavior) and DesktopCal happened to commit a row with a new
+            # u_mid in the gap, our subsequent SELECT/INSERT might fail to
+            # find the existing row and create a duplicate.
+            cursor = conn.execute(
+                "SELECT u_mid, COUNT(*) as cnt FROM item_table "
+                "WHERE u_mid != '' GROUP BY u_mid ORDER BY cnt DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            u_mid = row[0] if row else ""
+
             for date_str, task_texts in tasks_by_date.items():
                 unique_id = _date_to_unique_id(date_str)
                 stime = _date_to_stime(date_str)
@@ -545,10 +554,17 @@ def move_task(keyword: str, target_date: str, db_path: str = None) -> list[str]:
             # Now add tasks to target date
             if tasks_to_move:
                 target_unique_id = _date_to_unique_id(target_date)
-                u_mid = get_user_mid(db_path)
+                # Read u_mid in the same connection as the write to avoid
+                # the TOCTOU window between detect and use; see write_tasks.
+                u_mid_cursor = conn.execute(
+                    "SELECT u_mid, COUNT(*) as cnt FROM item_table "
+                    "WHERE u_mid != '' GROUP BY u_mid ORDER BY cnt DESC LIMIT 1"
+                )
+                u_mid_row = u_mid_cursor.fetchone()
+                u_mid = u_mid_row[0] if u_mid_row else ""
                 stime = _date_to_stime(target_date)
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
+
                 # Check if target date record exists
                 cursor = conn.execute(
                     "SELECT it_id, it_content FROM item_table WHERE it_unique_id = ? AND u_mid = ?",

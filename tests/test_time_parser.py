@@ -189,6 +189,21 @@ class TestNoTime:
         prefix, rest = extract_time("买9块钱的菜")
         assert prefix is None
 
+    def test_hour_24_is_rejected(self):
+        # 24:00 looks like end-of-day military time but is NOT a valid
+        # 24-hour clock value. _normalize_hour rejects hour >= 24.
+        prefix, rest = extract_time("24:00 standup")
+        assert prefix is None
+        assert "24:00" in rest
+
+    def test_hour_25_is_rejected(self):
+        prefix, _ = extract_time("25:30 nope")
+        assert prefix is None
+
+    def test_chinese_hour_24_is_rejected(self):
+        prefix, _ = extract_time("下午24点开会")
+        assert prefix is None
+
 
 # ---------------------------------------------------------------------------
 # Time at end / middle / start of text

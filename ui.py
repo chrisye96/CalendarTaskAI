@@ -960,10 +960,29 @@ class TaskInputWindow:
         ).start()
         
     def _show_error(self, error_msg):
-        """Show error message and re-enable input."""
+        """Show an error and re-enable whichever view is currently visible.
+
+        Two paths reach here:
+          * Initial submit failure  -> input view; re-enable submit/clear/paste.
+          * Re-run failure (one of the DeepSeek buttons on confirm view)
+            -> confirm view; re-enable confirm/reject/edit + the rerun
+            buttons. Without this branch the confirm view stays frozen
+            (every action button was disabled by `_rerun` and never
+            re-enabled), making the UI appear hung.
+        """
         self._analyzing = False
-        self._set_status(f"Error: {error_msg}", self.ERROR_COLOR)
-        self._set_input_enabled(True)
+        if self._current_view == "confirm" and self._ai_result is not None:
+            self.confirm_status.config(text=f"Error: {error_msg}", fg=self.ERROR_COLOR)
+            self._set_button_enabled(self.confirm_btn, True)
+            self._set_button_enabled(self.reject_btn, True)
+            self._set_button_enabled(self.edit_btn, True)
+            if self._rerun_flash_visible:
+                self._set_button_enabled(self.rerun_flash_btn, True)
+            if self._rerun_pro_visible:
+                self._set_button_enabled(self.rerun_pro_btn, True)
+        else:
+            self._set_status(f"Error: {error_msg}", self.ERROR_COLOR)
+            self._set_input_enabled(True)
         
     def _on_confirm(self):
         """Handle confirm button click."""
