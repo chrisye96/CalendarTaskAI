@@ -1,16 +1,16 @@
-"""Gemini API client for task analysis and allocation.
+"""LLM-backed task analysis (provider-agnostic orchestration).
 
-Phase 0 keeps the original procedural shape of this module. Phase 1 will
-introduce an `LLMProvider` abstraction that this file is rewritten on top of.
-For now we just fix the immediate bugs:
+Pipeline:
+  1. `analyze_tasks(user_input, config)` is the public entry point.
+  2. `task_parser.preprocess_input` resolves anything with an explicit date
+     hint deterministically, no LLM call.
+  3. Whatever is left goes to whichever provider `config["llm_provider"]`
+     selects (Gemini today, DeepSeek next; future providers plug in by
+     subclassing `providers.LLMProvider`).
 
-  * No request timeout (UI could hang indefinitely on a bad network).
-  * `print()` for diagnostics was lost under pythonw.
-
-Note: there is intentionally NO fallback to a different Gemini model on 404.
-If the configured `gemini_model` doesn't exist, the user gets a clear error
-so they can fix their config; silently retrying on a different model would
-hide the misconfiguration.
+This module owns the prompt builder and the JSON-parsing helper because both
+are provider-agnostic; the provider-specific HTTP / SDK details live in
+`providers/`.
 """
 import json
 import re
@@ -113,42 +113,6 @@ def _format_existing_tasks(tasks: dict) -> str:
     return "\n".join(lines)
 
 
-def call_gemini(system_prompt: str, user_message: str, config: dict) -> list[dict]:
-    """Call Gemini API and return parsed task allocation.
-
-    Uses exactly the configured `gemini_model`. If the model is unavailable
-    (404), the error propagates so the user can correct their config — we do
-    NOT silently retry on a different model.
-
-    Raises on any failure.
-    """
-    from google import genai
-
-    model = config.get("gemini_model", "gemini-3.1-flash-lite-preview")
-    timeout = int(config.get("request_timeout_sec", 30))
-
-    client = genai.Client(api_key=config["gemini_api_key"])
-
-    # google-genai's HttpOptions.timeout is in milliseconds.
-    try:
-        gen_config = genai.types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            http_options=genai.types.HttpOptions(timeout=timeout * 1000),
-        )
-    except (TypeError, AttributeError):
-        # Older builds without HttpOptions; degrade gracefully.
-        log.debug("HttpOptions not supported by installed google-genai; no timeout")
-        gen_config = genai.types.GenerateContentConfig(system_instruction=system_prompt)
-
-    log.info("Calling Gemini model=%s timeout=%ss", model, timeout)
-    response = client.models.generate_content(
-        model=model,
-        contents=user_message,
-        config=gen_config,
-    )
-    return parse_response(response.text)
-
-
 def parse_response(response_text: str) -> list[dict]:
     """Parse Gemini response to extract a JSON task list.
 
@@ -177,9 +141,16 @@ def parse_response(response_text: str) -> list[dict]:
     return validated
 
 
-def analyze_tasks(user_input: str, config: dict) -> list[dict]:
+def analyze_tasks(user_input: str, config: dict, *, force_high_quality: bool = False) -> list[dict]:
     """High-level entry point: split input, resolve dates deterministically,
     only call the LLM for the leftovers.
+
+    Args:
+        user_input: raw text from the user.
+        config: app config dict (`load_config()`).
+        force_high_quality: when True and the active provider supports a tier
+            split (e.g. DeepSeek pro vs flash), force the higher-quality
+            variant. Wired up to the "Re-run with Pro" button in the UI.
     """
     from task_parser import preprocess_input
     from profile_manager import load_profile
@@ -217,7 +188,13 @@ def analyze_tasks(user_input: str, config: dict) -> list[dict]:
         behavioral_patterns=patterns_text,
     )
 
-    ai_results = call_gemini(system_prompt, unresolved_text, config)
-    log.info("LLM returned %d allocations", len(ai_results))
+    from providers import get_provider
+    provider = get_provider(config)
+    if force_high_quality and provider.supports_quality_override():
+        log.info("Using %s high-quality variant (manual override)", provider.name)
+        ai_results = provider.analyze_high_quality(system_prompt, unresolved_text)
+    else:
+        ai_results = provider.analyze(system_prompt, unresolved_text)
+    log.info("Provider %s returned %d allocations", provider.name, len(ai_results))
 
     return resolved + ai_results
