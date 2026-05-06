@@ -59,15 +59,28 @@ CalendarTaskAI is an intelligent task scheduling assistant that integrates with 
 
 ---
 
+## LLM Providers
+
+CalendarTaskAI is provider-agnostic. The active backend is chosen by the `llm_provider` field in `config.json`. New providers plug in by subclassing `providers.LLMProvider`.
+
+| Provider | Models used | Quality tier override |
+|----------|-------------|------------------------|
+| `gemini` | `gemini-3.1-flash-lite-preview` (configurable) | No |
+| `deepseek` | `deepseek-v4-flash` for ≤ N unresolved tasks, `deepseek-v4-pro` above the threshold | Yes — confirm view shows a "Re-run with Pro" button you can click to force the higher tier |
+
+The threshold is `deepseek_pro_threshold` (default 5). The "Re-run with Pro" button only appears for providers whose `supports_quality_override()` returns `True`.
+
 ## Configuration
 
 ### First-Time Setup (GUI)
 
 The first time you run `python main.py` (GUI mode), a Tkinter setup wizard opens:
 
-1. Pick a provider (Gemini or DeepSeek).
-2. Click "Get a {provider} API key →" to open the right page in your browser.
-3. Paste the key and click Save.
+1. Pick a provider — Gemini (free tier) or DeepSeek.
+2. Click "Get a {provider} API key →" to open the provider's key page in your browser.
+3. Paste the key into the masked field.
+4. (Recommended) Click **Test** to verify the key works. The wizard makes a tiny live call and reports ✓ or an error.
+5. Click **Save**.
 
 Your key is saved to `%APPDATA%\CalendarTaskAI\data\config.json` and never leaves your machine. To change it later, click `Config` in the tray menu (or edit the JSON directly).
 
