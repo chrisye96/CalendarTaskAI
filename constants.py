@@ -53,7 +53,7 @@ DEFAULT_CONFIG = {
 
 # App info
 APP_NAME = "CalendarTaskAI"
-APP_VERSION = "0.2.0"
+APP_VERSION = "1.0.0"
 HISTORY_MAX_INTERACTIONS = 50
 
 # Backward compat shim. Code still doing `from constants import RATING_INTERVAL`
