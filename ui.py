@@ -946,11 +946,15 @@ class TaskInputWindow:
             
             # Write to database
             count = write_tasks(self._ai_result)
-            
+
+            # Record this batch for the tray's "Undo last add" action.
+            from last_op import record_last_add
+            record_last_add(self._ai_result)
+
             # Log interaction
             self._interaction_id = log_interaction(
-                self._user_input, 
-                self._ai_result, 
+                self._user_input,
+                self._ai_result,
                 accepted_tasks=self._ai_result
             )
             
@@ -1069,6 +1073,29 @@ class TaskInputWindow:
             self.parent.after(0, self._do_show)
         else:
             self._do_show()
+
+    def show_with_text(self, text: str):
+        """Open the window and pre-fill the input area with `text`.
+
+        Used by the tray's "Add from template" submenu so picking a template
+        opens the window with that template's body already typed in.
+        Thread-safe: forwards onto the Tk main loop.
+        """
+        if self.parent:
+            self.parent.after(0, lambda: self._do_show_with_text(text))
+        else:
+            self._do_show_with_text(text)
+
+    def _do_show_with_text(self, text: str):
+        """Show the window and stuff `text` into the input box (Tk thread)."""
+        self._do_show()
+        # Always start the workflow in the input view, not in confirm/rating.
+        self._reset_state()
+        self.text.config(state=tk.NORMAL, fg=self.FG_COLOR)
+        self.text.delete("1.0", tk.END)
+        if text:
+            self.text.insert("1.0", text)
+        self.text.focus_set()
             
     def _do_show(self):
         """Actually show the window (must be called from main thread)."""

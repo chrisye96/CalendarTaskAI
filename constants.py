@@ -17,6 +17,9 @@ CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 PROFILE_PATH = os.path.join(DATA_DIR, "profile.md")
 PENDING_PATH = os.path.join(DATA_DIR, "pending.json")
 HISTORY_PATH = os.path.join(DATA_DIR, "history.json")
+LAST_OP_PATH = os.path.join(DATA_DIR, "last_op.json")
+TEMPLATES_PATH = os.path.join(DATA_DIR, "templates.json")
+RECURRING_PATH = os.path.join(DATA_DIR, "recurring.json")
 
 # Default database path for DesktopCal
 DEFAULT_DB_PATH = os.path.join(os.getenv('APPDATA', ''), 'CalendarTask', 'Db', 'calendar.db')
