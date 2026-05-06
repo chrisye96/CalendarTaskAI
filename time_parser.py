@@ -58,7 +58,11 @@ def _ampm_norm(s: str | None) -> str | None:
 
 def _normalize_hour(hour: int, period: str | None, ampm: str | None) -> int | None:
     """Convert a 12-hour-ish reading to a 24h hour. Returns None if invalid."""
-    if hour < 0 or hour > 24:
+    # Valid 24-hour clock is 0..23. Hour 24 was previously left to be
+    # rejected later by `_valid_hm`; rejecting it at the source is more
+    # straightforward and avoids confusing intermediate values like
+    # `下午24点 -> 24` propagating through the period logic.
+    if hour < 0 or hour >= 24:
         return None
 
     if ampm == "pm":
