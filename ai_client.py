@@ -141,21 +141,43 @@ def parse_response(response_text: str) -> list[dict]:
     return validated
 
 
-def analyze_tasks(user_input: str, config: dict, *, force_high_quality: bool = False) -> list[dict]:
+def analyze_tasks(
+    user_input: str,
+    config: dict,
+    *,
+    force_high_quality: bool = False,
+    provider_override: str | None = None,
+) -> list[dict]:
     """High-level entry point: split input, resolve dates deterministically,
     only call the LLM for the leftovers.
+
+    Routing rules:
+      * `provider_override` (set by the UI's "Re-run with X" buttons) takes
+        precedence and disables the cross-provider auto-fallback below — when
+        the user explicitly picks a provider, errors should surface, not be
+        silently rerouted.
+      * Otherwise the default provider is `config["llm_provider"]` (Gemini
+        for new users). If the default is Gemini AND DeepSeek is configured
+        AND the Gemini call raises, we transparently retry with
+        DeepSeek-flash so the user doesn't lose the work-in-flight. The
+        fallback target is hard-wired to flash; pro is reserved for the
+        user's explicit "Re-run with Pro" button.
+      * `force_high_quality` makes the chosen provider use its higher tier
+        (DeepSeek pro). Gemini ignores the flag (no tier).
 
     Args:
         user_input: raw text from the user.
         config: app config dict (`load_config()`).
-        force_high_quality: when True and the active provider supports a tier
-            split (e.g. DeepSeek pro vs flash), force the higher-quality
-            variant. Wired up to the "Re-run with Pro" button in the UI.
+        force_high_quality: route to the higher-tier model on a tiered
+            provider (DeepSeek). Wired to the "Re-run with Pro" button.
+        provider_override: optional "gemini" / "deepseek" to bypass
+            `llm_provider`. Wired to the manual re-run buttons.
     """
     from task_parser import preprocess_input
     from profile_manager import load_profile
     from calendar_db import get_tasks_in_range
     from history import get_recent_interactions, get_behavioral_patterns, get_feedback_summary
+    from providers import NotConfigured, get_provider
 
     # Step 1: regex-based preprocessing
     resolved, unresolved = preprocess_input(user_input)
@@ -188,13 +210,40 @@ def analyze_tasks(user_input: str, config: dict, *, force_high_quality: bool = F
         behavioral_patterns=patterns_text,
     )
 
-    from providers import get_provider
-    provider = get_provider(config)
-    if force_high_quality and provider.supports_quality_override():
-        log.info("Using %s high-quality variant (manual override)", provider.name)
-        ai_results = provider.analyze_high_quality(system_prompt, unresolved_text)
-    else:
-        ai_results = provider.analyze(system_prompt, unresolved_text)
-    log.info("Provider %s returned %d allocations", provider.name, len(ai_results))
+    primary_name = provider_override or config.get("llm_provider", "gemini")
+    primary_config = {**config, "llm_provider": primary_name}
+    primary = get_provider(primary_config)
 
+    def _call(provider, *, hi_q: bool):
+        if hi_q and provider.supports_quality_override():
+            log.info("Using %s high-quality tier (manual override)", provider.name)
+            return provider.analyze_high_quality(system_prompt, unresolved_text)
+        return provider.analyze(system_prompt, unresolved_text)
+
+    try:
+        ai_results = _call(primary, hi_q=force_high_quality)
+    except NotConfigured:
+        # The user picked this provider explicitly (or has it as their
+        # default); surface the missing-key error so they fix their config.
+        raise
+    except Exception as e:
+        # Cross-provider auto-fallback. ONLY when:
+        #   - the user didn't pick the provider explicitly (no override),
+        #   - the primary was Gemini (we don't fall back FROM DeepSeek),
+        #   - DeepSeek is actually configured.
+        # Pro tier is intentionally NOT used here; pro requires an explicit
+        # button click so users always know when they're paying for it.
+        is_explicit_choice = provider_override is not None
+        deepseek_ready = bool(config.get("deepseek_api_key", "").strip())
+        if not is_explicit_choice and primary_name == "gemini" and deepseek_ready:
+            log.warning(
+                "Gemini failed (%s); auto-falling back to DeepSeek-flash", e
+            )
+            ds_config = {**config, "llm_provider": "deepseek"}
+            ds_provider = get_provider(ds_config)
+            ai_results = ds_provider.analyze(system_prompt, unresolved_text)
+        else:
+            raise
+
+    log.info("Provider returned %d allocations", len(ai_results))
     return resolved + ai_results
