@@ -509,11 +509,13 @@ def _try_pattern(text: str, pattern: str, extractor, position: str, reference: d
     return None
 
 
-def preprocess_input(raw_input: str, reference_date: date = None) -> tuple[list[dict], list[str]]:
+def preprocess_input(
+    raw_input: str, reference_date: date = None
+) -> tuple[list[dict], list[str], list[dict]]:
     """Preprocess user input using deterministic rules.
 
     Pipeline per task:
-        split → extract_date → extract_time → reassemble with [HH:MM] prefix
+        split → try recurring → else (extract_date → extract_time → reassemble)
 
     Args:
         raw_input: Raw user input containing one or more tasks.
@@ -521,17 +523,47 @@ def preprocess_input(raw_input: str, reference_date: date = None) -> tuple[list[
             (defaults to today).
 
     Returns:
-        (resolved, unresolved). Each `resolved` task has its date pinned;
-        `unresolved` tasks still need the LLM for date assignment but their
-        time prefix (if any) is already attached.
+        Tuple of `(resolved, unresolved, pending_recurring)`:
+
+        * `resolved`: tasks with a pinned date. Includes BOTH single-shot
+          tasks parsed deterministically AND every expanded instance of a
+          recurring rule detected in this input.
+        * `unresolved`: task texts (possibly with a `[HH:MM]` prefix) that
+          still need the LLM to assign a date.
+        * `pending_recurring`: recurring rule dicts whose instances have
+          been included in `resolved`. The CALLER is responsible for
+          calling `recurring.register_rule` for each of these AFTER the
+          user confirms the batch — registering before confirmation would
+          persist rules the user might reject.
     """
     from time_parser import extract_time
+    from recurring import (
+        PRE_EXPAND_WEEKS,
+        expand_rule,
+        parse_recurring_rule,
+    )
 
     tasks = split_tasks(raw_input)
-    resolved = []
-    unresolved = []
+    resolved: list[dict] = []
+    unresolved: list[str] = []
+    pending_recurring: list[dict] = []
+
+    ref_d = reference_date or date.today()
+    expand_end = ref_d + timedelta(weeks=PRE_EXPAND_WEEKS)
 
     for task in tasks:
+        # Recurring patterns short-circuit everything else: they expand
+        # straight into `resolved` and the rule is recorded for the caller
+        # to register on confirm.
+        rule = parse_recurring_rule(task)
+        if rule is not None:
+            instances = expand_rule(rule, ref_d, expand_end)
+            if instances:
+                rule["last_expanded_through"] = expand_end.isoformat()
+                resolved.extend(instances)
+                pending_recurring.append(rule)
+            continue
+
         date_str, after_date = extract_date(task, reference_date)
         time_prefix, after_time = extract_time(after_date)
 
@@ -547,4 +579,4 @@ def preprocess_input(raw_input: str, reference_date: date = None) -> tuple[list[
         else:
             unresolved.append(text)
 
-    return resolved, unresolved
+    return resolved, unresolved, pending_recurring

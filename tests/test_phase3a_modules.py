@@ -203,20 +203,21 @@ class TestTimePipeline:
         from datetime import date
         from task_parser import preprocess_input
         ref = date(2026, 5, 5)
-        resolved, unresolved = preprocess_input("明天9点开会", ref)
+        resolved, unresolved, recurring = preprocess_input("明天9点开会", ref)
         assert resolved == [{"date": "2026-05-06", "task": "[09:00] 开会"}]
         assert unresolved == []
+        assert recurring == []
 
     def test_time_only_lands_unresolved_with_prefix(self):
         from datetime import date
         from task_parser import preprocess_input
         ref = date(2026, 5, 5)
-        _, unresolved = preprocess_input("9点开会", ref)
+        _, unresolved, _ = preprocess_input("9点开会", ref)
         assert unresolved == ["[09:00] 开会"]
 
     def test_range_through_pipeline(self):
         from datetime import date
         from task_parser import preprocess_input
         ref = date(2026, 5, 5)
-        resolved, _ = preprocess_input("今天 上午10-11点 sprint review", ref)
+        resolved, _, _ = preprocess_input("今天 上午10-11点 sprint review", ref)
         assert resolved == [{"date": "2026-05-05", "task": "[10:00-11:00] sprint review"}]
