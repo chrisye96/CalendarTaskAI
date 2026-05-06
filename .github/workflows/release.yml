@@ -1,0 +1,71 @@
+name: Build release
+
+# Triggered by pushing a git tag matching `v*` (e.g. `v1.0.0`).
+# The workflow runs the same `build_release.py` we use locally, then
+# uploads the resulting zip and attaches it to a GitHub Release.
+#
+# Manual dispatch is also supported for dry-run testing without tagging.
+
+on:
+  push:
+    tags:
+      # Restrict to versioned tags only. Plain `v*` would also match
+      # ad-hoc tags like `vendor` or `v-experiment` and accidentally
+      # cut a release.
+      - "v[0-9]*"
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed by softprops/action-gh-release to create releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          # Default `cache: pip` only hashes `requirements.txt`.
+          # We also want a bump in `requirements-dev.txt` (e.g. a new
+          # PyInstaller version) to invalidate the cache; otherwise CI
+          # would silently build with the stale cached install.
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        # Sanity check the same suite we expect to pass on main before
+        # building a release artifact. A failing test fails the release.
+        run: pytest tests/ -q
+
+      - name: Build release bundle
+        run: python build_release.py
+
+      - name: Upload artifact (always)
+        # Always attach the zip to the workflow run so a manual dispatch
+        # produces something downloadable even without a release.
+        uses: actions/upload-artifact@v4
+        with:
+          name: CalendarTaskAI-zip
+          path: dist/CalendarTaskAI-v*.zip
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CalendarTaskAI-v*.zip
+          generate_release_notes: true
+          draft: true       # human reviews the auto-notes before publishing
+          prerelease: false
