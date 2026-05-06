@@ -90,7 +90,6 @@ Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
   "llm_provider": "gemini",
   "gemini_api_key": "your-key-here",
   "gemini_model": "gemini-3.1-flash-lite-preview",
-  "gemini_fallback_model": "gemini-2.5-flash",
   "deepseek_api_key": "",
   "deepseek_model_flash": "deepseek-v4-flash",
   "deepseek_model_pro": "deepseek-v4-pro",
@@ -111,7 +110,7 @@ Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
 |-------|-------------|
 | `llm_provider` | `"gemini"` or `"deepseek"` |
 | `gemini_api_key` / `deepseek_api_key` | API key for the chosen provider (BYOK) |
-| `gemini_model` | Primary Gemini model. If unavailable (404), automatically falls back to `gemini_fallback_model` and logs a warning |
+| `gemini_model` | Gemini model name. If the model doesn't exist, the error surfaces directly — no silent fallback (deliberate, so misconfigurations are visible) |
 | `deepseek_model_flash` / `_pro` | DeepSeek "fast" and "smart" tiers; the app uses pro for inputs above `deepseek_pro_threshold` unresolved tasks |
 | `hotkey` | Global hotkey to open the task input window |
 | `db_path` | Full path to DesktopCal's SQLite database file (empty = auto-detect) |

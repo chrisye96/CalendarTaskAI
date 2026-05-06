@@ -5,10 +5,12 @@ introduce an `LLMProvider` abstraction that this file is rewritten on top of.
 For now we just fix the immediate bugs:
 
   * No request timeout (UI could hang indefinitely on a bad network).
-  * Hardcoded model name in fallback didn't match the configured default.
-  * 404 on the configured model bubbled all the way to the user instead of
-    falling back to a safer model.
   * `print()` for diagnostics was lost under pythonw.
+
+Note: there is intentionally NO fallback to a different Gemini model on 404.
+If the configured `gemini_model` doesn't exist, the user gets a clear error
+so they can fix their config; silently retrying on a different model would
+hide the misconfiguration.
 """
 import json
 import re
@@ -111,57 +113,39 @@ def _format_existing_tasks(tasks: dict) -> str:
     return "\n".join(lines)
 
 
-def _is_model_not_found(err: Exception) -> bool:
-    """Best-effort detection of 'model does not exist' errors across SDK versions."""
-    msg = str(err).lower()
-    return any(token in msg for token in ("404", "not found", "does not exist", "no model"))
-
-
 def call_gemini(system_prompt: str, user_message: str, config: dict) -> list[dict]:
     """Call Gemini API and return parsed task allocation.
 
-    Uses the configured `gemini_model`. If that model returns a not-found
-    error, retries once with `gemini_fallback_model` and logs a warning so the
-    user knows their preferred model wasn't available.
+    Uses exactly the configured `gemini_model`. If the model is unavailable
+    (404), the error propagates so the user can correct their config — we do
+    NOT silently retry on a different model.
 
-    Raises on any other failure.
+    Raises on any failure.
     """
     from google import genai
 
-    primary = config.get("gemini_model", "gemini-3.1-flash-lite-preview")
-    fallback = config.get("gemini_fallback_model", "gemini-2.5-flash")
+    model = config.get("gemini_model", "gemini-3.1-flash-lite-preview")
     timeout = int(config.get("request_timeout_sec", 30))
 
     client = genai.Client(api_key=config["gemini_api_key"])
 
-    def _do_call(model_name: str):
-        # google-genai's HttpOptions.timeout is in milliseconds.
-        try:
-            gen_config = genai.types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                http_options=genai.types.HttpOptions(timeout=timeout * 1000),
-            )
-        except (TypeError, AttributeError):
-            # Older builds without HttpOptions; degrade gracefully.
-            log.debug("HttpOptions not supported by installed google-genai; no timeout")
-            gen_config = genai.types.GenerateContentConfig(system_instruction=system_prompt)
-        return client.models.generate_content(
-            model=model_name,
-            contents=user_message,
-            config=gen_config,
-        )
-
-    log.info("Calling Gemini model=%s timeout=%ss", primary, timeout)
+    # google-genai's HttpOptions.timeout is in milliseconds.
     try:
-        response = _do_call(primary)
-    except Exception as e:
-        if _is_model_not_found(e) and fallback and fallback != primary:
-            log.warning("Primary model '%s' unavailable (%s); retrying with '%s'",
-                        primary, e, fallback)
-            response = _do_call(fallback)
-        else:
-            raise
+        gen_config = genai.types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            http_options=genai.types.HttpOptions(timeout=timeout * 1000),
+        )
+    except (TypeError, AttributeError):
+        # Older builds without HttpOptions; degrade gracefully.
+        log.debug("HttpOptions not supported by installed google-genai; no timeout")
+        gen_config = genai.types.GenerateContentConfig(system_instruction=system_prompt)
 
+    log.info("Calling Gemini model=%s timeout=%ss", model, timeout)
+    response = client.models.generate_content(
+        model=model,
+        contents=user_message,
+        config=gen_config,
+    )
     return parse_response(response.text)
 
 
