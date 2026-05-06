@@ -1,10 +1,14 @@
-"""Tkinter floating window UI for CalendarTaskAI - Macaron Light Blue Theme."""
+"""Tkinter floating window UI for CalendarTaskAI.
+
+Theme tokens (light or dark) are loaded per instance from `theme.current_theme()`
+and refreshed on every (re)build of the widget tree, so a tray-driven theme
+switch takes effect on the next time the window is opened.
+"""
 import os
 import subprocess
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
 
 from logger import get_logger
 
@@ -102,35 +106,19 @@ def restart_desktopcal() -> tuple[bool, str]:
 
 
 class TaskInputWindow:
-    """Floating topmost window for task input and confirmation."""
-    
-    # Macaron Light Blue Theme
-    BG_COLOR = "#F5F9FC"          # Very light blue-gray background
-    FG_COLOR = "#2C3E50"          # Dark blue-gray text
-    ACCENT_COLOR = "#89CFF0"      # Macaron baby blue (primary accent)
-    ACCENT_DARK = "#6BB8E0"       # Slightly darker blue (hover states)
-    ACCENT_LIGHT = "#D4EEFF"      # Very pale blue (subtle highlights)
-    BUTTON_BG = "#E3F2FD"         # Pale blue button background
-    BUTTON_HOVER = "#BBDEFB"      # Slightly darker on hover
-    BUTTON_TEXT = "#2C3E50"       # Dark text on light buttons
-    ERROR_COLOR = "#E57373"       # Soft red
-    SUCCESS_COLOR = "#81C784"     # Soft green
-    SUCCESS_DARK = "#66BB6A"      # Darker green for hover
-    BORDER_COLOR = "#B3D9F2"      # Light blue border
-    TEXT_BG = "#FFFFFF"           # Pure white for text areas
-    PLACEHOLDER_COLOR = "#90A4AE" # Muted gray for placeholders
-    STATUS_COLOR = "#78909C"      # Blue gray for status text
-    STAR_COLOR = "#FFD54F"        # Warm yellow for stars
-    TITLE_BG = "#89CFF0"          # Macaron blue title bar
-    TITLE_FG = "#FFFFFF"          # White text on title bar
-    DISABLED_BG = "#CFD8DC"       # Gray for disabled buttons
-    DISABLED_FG = "#90A4AE"       # Muted text for disabled
-    
+    """Floating topmost window for task input and confirmation.
+
+    Color tokens are populated as INSTANCE attributes from `theme.current_theme()`
+    at construction time. This means switching the theme via the tray menu
+    takes effect the next time the window is built (caller calls `destroy()`
+    after persisting the new theme; next `show()` rebuilds with the new colors).
+    """
+
     def __init__(self, parent=None):
         """Initialize the input window.
-        
+
         Args:
-            parent: Optional tkinter parent window
+            parent: Optional tkinter parent window.
         """
         self.parent = parent
         self.root = None
@@ -145,11 +133,50 @@ class TaskInputWindow:
         self._interaction_id = None
         self._analyzing = False
         self._confirm_done = False
-        
+
+        # Initial theme load. Refreshed on every _create_window call so the
+        # tray-menu Theme switcher can rebuild this window with a new palette.
+        self._load_theme_tokens()
+
+    def _load_theme_tokens(self):
+        """Populate color instance-attributes from `theme.current_theme()`.
+
+        Called at construction and again at every (re)build of the widget
+        tree, so destroying + reshowing the window picks up a tray-driven
+        theme change without an app restart.
+        """
+        from theme import current_theme
+        t = current_theme()
+        self.BG_COLOR        = t["bg"]
+        self.FG_COLOR        = t["fg"]
+        self.ACCENT_COLOR    = t["accent"]
+        self.ACCENT_DARK     = t["accent_dark"]
+        self.ACCENT_LIGHT    = t["accent_light"]
+        self.ACCENT_TEXT     = t["accent_text"]
+        self.BUTTON_BG       = t["surface_alt"]
+        self.BUTTON_HOVER    = t["button_hover"]
+        self.BUTTON_TEXT     = t["fg"]
+        self.ERROR_COLOR     = t["error"]
+        self.SUCCESS_COLOR   = t["success"]
+        self.SUCCESS_DARK    = t["success_dark"]
+        self.BORDER_COLOR    = t["border"]
+        self.TEXT_BG         = t["surface"]
+        self.PLACEHOLDER_COLOR = t["fg_subtle"]
+        self.STATUS_COLOR    = t["fg_muted"]
+        self.STAR_COLOR      = t["star"]
+        self.TITLE_BG        = t["title_bg"]
+        self.TITLE_FG        = t["title_fg"]
+        self.DISABLED_BG     = t["disabled_bg"]
+        self.DISABLED_FG     = t["disabled_fg"]
+
     def _create_window(self):
         """Create the window if it doesn't exist."""
         if self.root is not None:
             return
+
+        # Refresh theme tokens before building widgets, so a tray-driven
+        # theme change between destroy() and the next show() is picked up.
+        self._load_theme_tokens()
             
         if self.parent:
             self.root = tk.Toplevel(self.parent)
@@ -256,11 +283,15 @@ class TaskInputWindow:
         """
         if is_primary:
             bg = bg or self.ACCENT_COLOR
-            fg = fg or "#FFFFFF"
+            # Use the theme's accent_text rather than hardcoded white. In
+            # dark mode the desaturated accent has too little contrast with
+            # white text (~3:1, fails AA), so dark text on baby-blue is
+            # used instead.
+            fg = fg or self.ACCENT_TEXT
             hover_bg = hover_bg or self.ACCENT_DARK
         elif is_success:
             bg = bg or self.SUCCESS_COLOR
-            fg = fg or "#FFFFFF"
+            fg = fg or self.ACCENT_TEXT
             hover_bg = hover_bg or self.SUCCESS_DARK
         else:
             bg = bg or self.BUTTON_BG
@@ -481,7 +512,7 @@ class TaskInputWindow:
 
         # Manual re-run buttons. Both target DeepSeek (the alternative
         # provider). Visibility is driven by `deepseek_api_key` being set,
-        # not by the active provider — so users on Gemini can escalate, and
+        # not by the active provider, so users on Gemini can escalate, and
         # users already on DeepSeek can still re-attempt or escalate to pro.
         # Packed in _sync_rerun_buttons_visibility.
         self.rerun_flash_btn = self._create_button(
@@ -869,7 +900,7 @@ class TaskInputWindow:
     def _sync_rerun_buttons_visibility(self) -> None:
         """Pack/forget both DeepSeek re-run buttons based on whether the user
         has a DeepSeek key configured. Visibility is *not* tied to which
-        provider is currently the default — even Gemini-default users get
+        provider is currently the default; even Gemini-default users get
         these escape hatches once DeepSeek is set up.
         """
         try:
@@ -1050,6 +1081,16 @@ class TaskInputWindow:
             self.root.withdraw()
             self._is_shown = False
             self._reset_state()
+            # If the user changed the theme while this window was visible,
+            # the tray handler set _theme_dirty rather than destroying. Now
+            # that we're hidden, tear down so the next show() rebuilds with
+            # the new palette.
+            if getattr(self, "_theme_dirty", False):
+                try:
+                    self.destroy()
+                except Exception:
+                    pass
+                self._theme_dirty = False
             
     def _reset_state(self):
         """Reset window state for next use."""
