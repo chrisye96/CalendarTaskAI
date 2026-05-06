@@ -88,8 +88,15 @@ def retry_all(config: dict) -> dict:
     
     for item in pending:
         try:
-            tasks = analyze_tasks(item["input"], config)
+            tasks, pending_recurring = analyze_tasks(item["input"], config)
             written = write_tasks(tasks)
+            # Register any recurring rules that were detected on the
+            # original (failed) attempt; they weren't persisted then
+            # because registration is gated on a successful write.
+            if pending_recurring:
+                from recurring import register_rule
+                for rule in pending_recurring:
+                    register_rule(rule)
             results.append({"input": item["input"], "tasks": tasks, "written": written})
             success += 1
         except Exception as e:
