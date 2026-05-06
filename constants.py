@@ -48,6 +48,7 @@ DEFAULT_CONFIG = {
     "auto_restart_desktopcal": False,  # off by default: forcibly killing DesktopCal risks data loss
     "request_timeout_sec": 30,
     "rating_interval": 20,
+    "theme": "system",  # "light" | "dark" | "system" (follow Windows AppsUseLightTheme)
 }
 
 # App info

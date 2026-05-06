@@ -1,10 +1,33 @@
 """Color tokens used across all Tkinter windows.
 
 Single source of truth so setup_wizard and the main task window stay visually
-consistent. Phase 3 will add DARK_THEME and a runtime switcher; for now only
-the existing macaron-blue light theme is exposed.
+consistent. Two palettes are defined: macaron-blue LIGHT and a dark mode
+that keeps the macaron-blue identity through desaturation rather than simple
+inversion.
+
+Resolution order for `current_theme()`:
+  1. Read `config["theme"]`. If "light" or "dark", use that.
+  2. If "system" (or anything else), query the Windows registry for
+     `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\\AppsUseLightTheme`
+     and pick LIGHT (1) or DARK (0). Falls back to LIGHT on non-Windows
+     or registry errors.
+
+Why a few specific choices in the dark theme:
+
+  * `bg = #1A2530` (not pure black). Pure black is harsh on LCD displays
+    and hurts macaron identity. A blue-tinted slate keeps the brand.
+
+  * `accent = #5C9DC8` (desaturated baby blue) and `accent_text = #1A2530`
+    (DARK text on the accent button — flipped from light theme's white).
+    White on `#5C9DC8` is ~3:1 contrast, fails WCAG AA for normal text;
+    dark slate on the same blue is ~15:1 and looks correct in dark mode.
+
+  * `title_bg = #3A5775` deeper than `accent`. The title bar should still
+    feel branded but not glow at the top of the window in dark mode.
 """
 from __future__ import annotations
+
+import sys
 
 LIGHT_THEME: dict[str, str] = {
     # Surfaces
@@ -23,30 +46,126 @@ LIGHT_THEME: dict[str, str] = {
     # Accents
     "accent":        "#89CFF0",   # primary action background
     "accent_dark":   "#6BB8E0",   # primary action hover
+    "accent_light":  "#D4EEFF",   # very pale accent (subtle highlights)
     "accent_text":   "#FFFFFF",   # text on primary action
 
+    # Button states (secondary buttons that aren't accent-colored)
+    "button_hover":  "#BBDEFB",
+
     # Status / feedback
-    "success":       "#66BB6A",
+    "success":       "#81C784",
+    "success_dark":  "#66BB6A",   # success hover
     "success_bg":    "#E8F5E9",
     "warning":       "#FFA726",
     "warning_bg":    "#FFF3E0",
     "error":         "#E57373",
     "error_bg":      "#FFEBEE",
 
-    # Title bar (used by floating windows that draw their own chrome)
+    # Title bar (floating windows draw their own chrome)
     "title_bg":      "#89CFF0",
     "title_fg":      "#FFFFFF",
 
     # Disabled
     "disabled_bg":   "#CFD8DC",
     "disabled_fg":   "#90A4AE",
+
+    # Misc
+    "star":          "#FFD54F",   # rating stars
 }
 
 
-def current_theme() -> dict[str, str]:
+DARK_THEME: dict[str, str] = {
+    # Surfaces (blue-tinted slate, not pure black)
+    "bg":            "#1A2530",   # window background
+    "surface":       "#243240",   # cards, inputs
+    "surface_alt":   "#2D3D4F",   # secondary buttons, subtle highlights
+    "border":        "#3D5061",   # 1 px borders / dividers
+    "border_strong": "#5C9DC8",   # focused inputs, selected radio cards
+
+    # Text — primary fg ~13:1 on bg, fg_muted ~7:1, fg_subtle ~5:1 (all AA+)
+    "fg":            "#E8ECF0",   # primary
+    "fg_muted":      "#A8B5C0",   # captions, helper text
+    "fg_subtle":     "#8896A3",   # placeholders
+    "link":          "#82B7E0",   # hyperlink, lighter blue for dark bg
+
+    # Accents — note: button TEXT is dark, not white, for AA contrast on
+    # the desaturated accent. White on #5C9DC8 fails AA; dark on it passes.
+    "accent":        "#5C9DC8",   # primary action background
+    "accent_dark":   "#4A8AB4",   # primary action hover
+    "accent_light":  "#3A4D62",   # subtle accent surface (e.g. selected list row)
+    "accent_text":   "#1A2530",   # DARK text on accent button (flipped)
+
+    # Button states
+    "button_hover":  "#3D5061",
+
+    # Status / feedback
+    "success":       "#6FCB73",
+    "success_dark":  "#5CB861",
+    "success_bg":    "#1F3A22",
+    "warning":       "#FFB74D",
+    "warning_bg":    "#3F2E1A",
+    "error":         "#EF8585",
+    "error_bg":      "#3E1F1F",
+
+    # Title bar — deeper navy keeps brand color but doesn't glow on dark
+    "title_bg":      "#3A5775",
+    "title_fg":      "#FFFFFF",
+
+    # Disabled
+    "disabled_bg":   "#2A3540",
+    "disabled_fg":   "#5A6770",
+
+    # Misc — yellow stars work in both modes
+    "star":          "#FFD54F",
+}
+
+
+# Public values for `theme` config field.
+THEME_CHOICES: tuple[str, ...] = ("light", "dark", "system")
+
+
+def resolve_system_theme() -> str:
+    """Detect the OS-level theme preference. Returns "light" or "dark".
+
+    On Windows, reads HKCU AppsUseLightTheme (1=light, 0=dark). On any other
+    OS, or if the registry read fails, falls back to "light".
+    """
+    if sys.platform != "win32":
+        return "light"
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "light" if value == 1 else "dark"
+    except Exception:
+        return "light"
+
+
+def resolve_effective_theme(setting: str | None = None) -> str:
+    """Convert a `theme` config value into the concrete theme to apply.
+
+    `setting` is one of "light", "dark", "system", or None (treated as
+    "system"). Returns "light" or "dark" — never "system".
+    """
+    if setting in ("light", "dark"):
+        return setting
+    return resolve_system_theme()
+
+
+def current_theme(setting: str | None = None) -> dict[str, str]:
     """Return the active theme dict.
 
-    Phase 1 always returns LIGHT_THEME. Phase 3 will read from config and
-    return LIGHT_THEME or DARK_THEME accordingly.
+    If `setting` is None, reads the `theme` field from config.json. Pass an
+    explicit setting to bypass config (used by previews).
     """
-    return LIGHT_THEME
+    if setting is None:
+        try:
+            from config_manager import get_config
+            setting = get_config("theme") or "system"
+        except Exception:
+            setting = "system"
+    effective = resolve_effective_theme(setting)
+    return DARK_THEME if effective == "dark" else LIGHT_THEME
