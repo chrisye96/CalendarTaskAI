@@ -138,6 +138,9 @@ class TaskInputWindow:
         self._drag_data = {"x": 0, "y": 0}
         self._current_view = "input"  # "input", "confirm", or "rating"
         self._ai_result = None
+        # Recurring rules detected during the last analyze; registered to
+        # disk only after the user confirms the batch (see _on_confirm).
+        self._pending_recurring: list[dict] = []
         self._user_input = ""
         self._interaction_id = None
         self._analyzing = False
@@ -813,20 +816,26 @@ class TaskInputWindow:
             from ai_client import analyze_tasks
 
             config = load_config()
-            result = analyze_tasks(
+            result, pending_recurring = analyze_tasks(
                 text, config,
                 force_high_quality=force_high_quality,
                 provider_override=provider_override,
             )
-            self.root.after(0, self._show_confirm, text, result)
+            self.root.after(0, self._show_confirm, text, result, pending_recurring)
         except Exception as e:
             from retry_queue import save_pending
             save_pending(text)
             self.root.after(0, self._show_error, str(e))
 
-    def _show_confirm(self, user_input, result):
-        """Show confirmation dialog with AI results."""
+    def _show_confirm(self, user_input, result, pending_recurring=None):
+        """Show confirmation dialog with AI results.
+
+        `pending_recurring` is the rule list returned by `analyze_tasks`.
+        Stored on the instance so `_on_confirm` can register them after
+        the user accepts; cleared on reject / re-run.
+        """
         self._ai_result = result
+        self._pending_recurring = pending_recurring or []
         self._user_input = user_input
         self._confirm_done = False
         self._analyzing = False
@@ -947,6 +956,14 @@ class TaskInputWindow:
             # Write to database
             count = write_tasks(self._ai_result)
 
+            # Register any recurring rules discovered during analyze. We do
+            # this AFTER the write succeeds so a DB error doesn't leave a
+            # registered rule with no instances actually written.
+            if self._pending_recurring:
+                from recurring import register_rule
+                for rule in self._pending_recurring:
+                    register_rule(rule)
+
             # Record this batch for the tray's "Undo last add" action.
             from last_op import record_last_add
             record_last_add(self._ai_result)
@@ -1037,6 +1054,7 @@ class TaskInputWindow:
     def _reset_state(self):
         """Reset window state for next use."""
         self._ai_result = None
+        self._pending_recurring = []
         self._user_input = ""
         self._interaction_id = None
         self._analyzing = False
