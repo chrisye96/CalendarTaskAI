@@ -475,6 +475,14 @@ class TaskInputWindow:
             header_row, "Copy (Ctrl+C)", self._on_copy
         )
         self.copy_btn.pack(side=tk.RIGHT)
+
+        # "Re-run with Pro" — only shown when the active provider exposes a
+        # quality tier (DeepSeek today). Created here, packed/unpacked in
+        # _show_confirm based on provider capabilities.
+        self.rerun_pro_btn = self._create_button(
+            header_row, "Re-run with Pro", self._on_rerun_pro
+        )
+        self._rerun_pro_visible = False
         
         # Task list frame with border
         list_border = tk.Frame(content, bg=self.BORDER_COLOR)
@@ -780,49 +788,97 @@ class TaskInputWindow:
         # Run AI call in background thread
         threading.Thread(target=self._call_ai, args=(text,), daemon=True).start()
         
-    def _call_ai(self, text):
-        """Call AI to analyze tasks (runs in background thread)."""
+    def _call_ai(self, text, force_high_quality: bool = False):
+        """Call AI to analyze tasks (runs in background thread).
+
+        `force_high_quality` is True when the user clicked "Re-run with Pro"
+        and the active provider supports a smarter tier.
+        """
         try:
             from config_manager import load_config
             from ai_client import analyze_tasks
-            
+
             config = load_config()
-            result = analyze_tasks(text, config)
+            result = analyze_tasks(text, config, force_high_quality=force_high_quality)
             self.root.after(0, self._show_confirm, text, result)
         except Exception as e:
             from retry_queue import save_pending
             save_pending(text)
             self.root.after(0, self._show_error, str(e))
-            
+
     def _show_confirm(self, user_input, result):
         """Show confirmation dialog with AI results."""
         self._ai_result = result
         self._user_input = user_input
         self._confirm_done = False
         self._analyzing = False
-        
+
         # Populate task list
         self.task_list.config(state=tk.NORMAL)
         self.task_list.delete("1.0", tk.END)
-        
+
         # Header
         self.task_list.insert(tk.END, f"{'Date':<14}Task\n")
         self.task_list.insert(tk.END, "─" * 45 + "\n")
-        
+
         # Tasks
         for task in result:
             self.task_list.insert(tk.END, f"{task['date']:<14}{task['task']}\n")
-            
+
         self.task_list.config(state=tk.DISABLED)
         self.confirm_status.config(text=f"{len(result)} task(s) to be added", fg=self.STATUS_COLOR)
-        
+
         # Enable confirm view buttons
         self._set_button_enabled(self.confirm_btn, True)
         self._set_button_enabled(self.reject_btn, True)
         self._set_button_enabled(self.edit_btn, True)
         self._set_button_enabled(self.copy_btn, True)
-        
+
+        # Show "Re-run with Pro" only if the active provider has a quality tier
+        self._sync_rerun_pro_visibility()
+
         self._show_confirm_view()
+
+    def _sync_rerun_pro_visibility(self) -> None:
+        """Pack or forget the Re-run-Pro button based on provider capability."""
+        try:
+            from config_manager import load_config
+            from providers import get_provider
+            provider = get_provider(load_config())
+            should_show = provider.supports_quality_override()
+        except Exception:
+            should_show = False
+
+        if should_show and not self._rerun_pro_visible:
+            # Pack to the right of Copy. side=RIGHT means later packs go to
+            # the LEFT of earlier ones, so we appear next to Copy with a gap.
+            self.rerun_pro_btn.pack(side=tk.RIGHT, padx=(0, 8))
+            self._rerun_pro_visible = True
+        elif not should_show and self._rerun_pro_visible:
+            self.rerun_pro_btn.pack_forget()
+            self._rerun_pro_visible = False
+
+        if self._rerun_pro_visible:
+            self._set_button_enabled(self.rerun_pro_btn, True)
+
+    def _on_rerun_pro(self) -> None:
+        """User asked to redo the analysis with the provider's pro/quality tier."""
+        if not self._user_input or self._analyzing:
+            return
+
+        self._analyzing = True
+        self._set_button_enabled(self.rerun_pro_btn, False)
+        self._set_button_enabled(self.confirm_btn, False)
+        self._set_button_enabled(self.reject_btn, False)
+        self._set_button_enabled(self.edit_btn, False)
+        self.confirm_status.config(text="Re-running with Pro...", fg=self.ACCENT_COLOR)
+
+        threading.Thread(
+            target=self._call_ai,
+            args=(self._user_input,),
+            kwargs={"force_high_quality": True},
+            daemon=True,
+        ).start()
         
     def _show_error(self, error_msg):
         """Show error message and re-enable input."""
@@ -844,6 +900,8 @@ class TaskInputWindow:
             self._set_button_enabled(self.confirm_btn, False)
             self._set_button_enabled(self.reject_btn, False)
             self._set_button_enabled(self.edit_btn, False)
+            if self._rerun_pro_visible:
+                self._set_button_enabled(self.rerun_pro_btn, False)
             
             # Write to database
             count = write_tasks(self._ai_result)
@@ -893,6 +951,8 @@ class TaskInputWindow:
             self._set_button_enabled(self.confirm_btn, True)
             self._set_button_enabled(self.reject_btn, True)
             self._set_button_enabled(self.edit_btn, True)
+            if self._rerun_pro_visible:
+                self._set_button_enabled(self.rerun_pro_btn, True)
             self.confirm_status.config(text=f"Error: {e}", fg=self.ERROR_COLOR)
             
     def _on_reject(self):
@@ -947,6 +1007,10 @@ class TaskInputWindow:
         self._set_button_enabled(self.reject_btn, True)
         self._set_button_enabled(self.edit_btn, True)
         self._set_button_enabled(self.copy_btn, True)
+        # Hide the Re-run-Pro button on reset; _show_confirm re-syncs it next time.
+        if self._rerun_pro_visible:
+            self.rerun_pro_btn.pack_forget()
+            self._rerun_pro_visible = False
         self._reset_stars()
         
         # Show input view
