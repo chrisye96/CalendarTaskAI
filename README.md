@@ -288,7 +288,9 @@ The tray icon features a macaron blue background with dark "CT" text, matching t
 
 Right-click the tray icon for:
 - **Add Task** - Open input window
+- **Add from template ▶** - Pre-fill the input with one of the saved templates (5 ship out of the box: Standup, 周报, Sprint planning, 健身计划, 读书清单; edit `data/templates.json` to add your own)
 - **Today's Tasks** - View tasks for today
+- **Undo last add** - Reverses the most recent add (greyed out when there's nothing to undo)
 - **Retry Pending** - Manually retry failed requests
 - **Config** - Open config.json in editor
 - **Profile** - Open profile.md in editor
@@ -304,11 +306,15 @@ Right-click the tray icon for:
 | `config [ACTION]` | View or modify configuration | `python main.py config show` |
 | `list [DATE]` | List tasks for a date/range | `python main.py list this-week` |
 | `today` | Show today's tasks | `python main.py today` |
+| `next [N]` | Show tasks for the next N days (default 7) | `python main.py next 14` |
 | `done KEYWORD` | Mark matching tasks as done | `python main.py done "买菜"` |
 | `undone KEYWORD` | Mark matching tasks as undone | `python main.py undone "买菜"` |
 | `delete KEYWORD` | Delete matching tasks | `python main.py delete "旧任务"` |
 | `move KEYWORD DATE` | Move tasks to new date | `python main.py move "会议" 2026-03-25` |
 | `search KEYWORD` | Search tasks by keyword | `python main.py search "报告"` |
+| `undo` | Reverse the most recent batch of tasks added | `python main.py undo` |
+| `backup [--out FILE]` | Export config (keys redacted), profile, history, templates, recurring rules, ±1 year of tasks | `python main.py backup --out my-backup.json` |
+| `restore PATH` | Restore from a backup JSON file | `python main.py restore my-backup.json` |
 | `export [OPTIONS]` | Export tasks to stdout | `python main.py export --format md` |
 | `refresh` | Show refresh instructions | `python main.py refresh` |
 | `retry` | Retry all pending requests | `python main.py retry` |
@@ -397,6 +403,27 @@ Tasks can be separated by:
 - `next week`, `next monday` ~ `next sunday` - Next week/day
 - `in 3 days`, `in 2 weeks` - Relative
 - `end of month` - End of month
+
+### Supported Time-of-Day Formats
+
+Tasks can include a time hint that gets prefixed onto the task text as `[HH:MM]` (single time) or `[HH:MM-HH:MM]` (range). DesktopCal displays the prefix verbatim.
+
+| You type | Becomes |
+|----------|---------|
+| `9点开会` | `[09:00] 开会` |
+| `9点半开会` | `[09:30] 开会` |
+| `9点45分会议` | `[09:45] 会议` |
+| `上午9点开会` | `[09:00] 开会` |
+| `下午3点开会` | `[15:00] 开会` |
+| `晚上9点睡觉` | `[21:00] 睡觉` |
+| `9-10点 开会` | `[09:00-10:00] 开会` |
+| `下午3-5点 讨论` | `[15:00-17:00] 讨论` |
+| `9:00 daily standup` | `[09:00] daily standup` |
+| `3pm meeting` | `[15:00] meeting` |
+| `9:00-10:30 review` | `[09:00-10:30] review` |
+| `9-11am sprint` | `[09:00-11:00] sprint` |
+
+Time extraction runs after date extraction, so `明天9点开会` resolves to date=tomorrow with task=`[09:00] 开会`. Anything we can't parse confidently is left in the task text untouched (no LLM-generated prefixes — that path was retired to avoid format drift like `[9:00]` without zero-padding).
 
 ### Deterministic vs AI Processing
 
