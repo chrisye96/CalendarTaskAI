@@ -56,7 +56,7 @@ def add(text):
     try:
         from ai_client import analyze_tasks
         click.echo("Analyzing tasks...")
-        tasks = analyze_tasks(user_input, config)
+        tasks, pending_recurring = analyze_tasks(user_input, config)
     except Exception as e:
         # Save to retry queue on failure
         from retry_queue import save_pending
@@ -64,11 +64,11 @@ def add(text):
         click.echo(click.style(f"API Error: {e}", fg="red"))
         click.echo("Your input has been saved. Run 'calendarai retry' when online.")
         return
-    
+
     if not tasks:
         click.echo("No tasks were identified from your input.")
         return
-    
+
     # Display allocation plan as table
     click.echo()
     click.echo(click.style("Allocation Plan:", fg="cyan", bold=True))
@@ -78,17 +78,35 @@ def add(text):
     for task in tasks:
         click.echo(f"{task['date']:<14}| {task['task']}")
     click.echo("-" * 50)
+    if pending_recurring:
+        click.echo(click.style(
+            f"\nRecurring rule(s) detected ({len(pending_recurring)}):", fg="cyan"
+        ))
+        for rule in pending_recurring:
+            click.echo(f"  • {rule['original_text']} (12 weeks pre-expanded)")
     click.echo()
-    
+
     # Ask for confirmation
     if click.confirm("Confirm this allocation?"):
         # Write tasks to database
         from calendar_db import write_tasks
         from history import log_interaction, should_ask_rating, save_rating
-        
+        from last_op import record_last_add
+
         try:
             count = write_tasks(tasks)
             click.echo(click.style(f"Successfully added {count} task(s).", fg="green"))
+            # Register recurring rules only after the write succeeds, so a
+            # DB error doesn't leave a registered rule with no instances.
+            if pending_recurring:
+                from recurring import register_rule
+                for rule in pending_recurring:
+                    register_rule(rule)
+                click.echo(click.style(
+                    f"Registered {len(pending_recurring)} recurring rule(s).",
+                    fg="green",
+                ))
+            record_last_add(tasks)
             log_interaction(user_input, tasks, accepted_tasks=tasks)
         except Exception as e:
             click.echo(click.style(f"Database Error: {e}", fg="red"))
