@@ -1,33 +1,44 @@
-"""First-run setup wizard (Tkinter dialog).
+"""First-run setup wizard.
 
 Replaces the old console-based `interactive_setup()` for GUI mode. Under
-`pythonw` the old flow deadlocks because there is no stdin; this module gives
-the user a real window to fill in.
+`pythonw` that flow deadlocks because there's no stdin; here the user gets
+a proper window.
 
-Phase 0 implementation: functional, minimal styling. Phase 1 will replace
-this with a polished design via the ui-ux-pro-max skill.
+Layout (light macaron theme, matched to TaskInputWindow):
+  - Title bar (accent blue)
+  - Provider section: radio "cards" with name + tagline
+  - API key section: masked entry, "Get key" link, "Test connection" button
+  - Status line: ✓ / ⚠ / ✗ icon + text
+  - Footer: Cancel / Save
+
+Test connection runs `LLMProvider.test_connection()` in a background thread
+so the UI doesn't freeze; the result is reported on the main thread via
+`root.after(0, ...)`.
 """
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 import webbrowser
 from tkinter import ttk
-from typing import Optional
 
 from config_manager import load_config, save_config
 from logger import get_logger
+from providers import NotConfigured, get_provider, list_providers
+from theme import LIGHT_THEME as T
 
 log = get_logger(__name__)
 
-# Provider metadata: where users go to get an API key.
-_PROVIDER_INFO = {
+# Where each provider sends users to claim a key, and which config field
+# stores it. Order here also drives the radio order.
+_PROVIDER_META = {
     "gemini": {
-        "label": "Google Gemini",
+        "tagline": "Free tier available. Default for new users.",
         "key_url": "https://aistudio.google.com/apikey",
         "key_field": "gemini_api_key",
     },
     "deepseek": {
-        "label": "DeepSeek",
+        "tagline": "Pro / flash auto-selection by task volume.",
         "key_url": "https://platform.deepseek.com/api_keys",
         "key_field": "deepseek_api_key",
     },
@@ -35,148 +46,325 @@ _PROVIDER_INFO = {
 
 
 def run_setup_wizard() -> bool:
-    """Show the setup dialog. Blocks until the user submits or cancels.
-
-    Returns True on success (config written), False on cancel.
-    """
+    """Show the wizard. Blocks. Returns True if the user saved a config."""
     wizard = _SetupWizard()
     wizard.run()
     return wizard.completed
 
 
 class _SetupWizard:
-    """Modal Tkinter dialog for first-run BYOK configuration."""
-
     def __init__(self) -> None:
         self.completed = False
-        self.root = tk.Tk()
-        self.root.title("CalendarTaskAI - First-run Setup")
-        self.root.geometry("520x420")
-        self.root.resizable(False, False)
 
-        # Center on screen.
+        self.root = tk.Tk()
+        self.root.title("CalendarTaskAI — Setup")
+        self.root.geometry("560x540")
+        self.root.resizable(False, False)
+        self.root.configure(bg=T["bg"])
+
+        # Center on screen
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() - 520) // 2
-        y = (self.root.winfo_screenheight() - 420) // 2
+        x = (self.root.winfo_screenwidth() - 560) // 2
+        y = (self.root.winfo_screenheight() - 540) // 2
         self.root.geometry(f"+{x}+{y}")
 
         config = load_config()
         self._provider_var = tk.StringVar(value=config.get("llm_provider", "gemini"))
+        self._provider_var.trace_add("write", lambda *_: self._on_provider_change())
         self._key_var = tk.StringVar(value="")
 
-        self._build_ui()
+        # Pre-populate the key for the currently selected provider, if any
+        meta = _PROVIDER_META[self._provider_var.get()]
+        existing = config.get(meta["key_field"], "")
+        if existing:
+            self._key_var.set(existing)
 
-        # Close-window-button = cancel
+        # Status state for the test-connection result
+        self._status_kind = "info"  # "info" | "ok" | "warn" | "error"
+        self._test_thread: threading.Thread | None = None
+
+        self._build()
         self.root.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
-    def _build_ui(self) -> None:
-        pad = {"padx": 18, "pady": 8}
-        title = ttk.Label(
-            self.root,
-            text="Welcome to CalendarTaskAI",
-            font=("Segoe UI", 14, "bold"),
-        )
-        title.pack(anchor="w", padx=18, pady=(18, 4))
+    # ---------------------------------------------------------------- build
 
-        subtitle = ttk.Label(
-            self.root,
-            text=(
-                "CalendarTaskAI uses an LLM to schedule tasks intelligently.\n"
-                "Bring your own API key (BYOK) — your key stays on this machine."
-            ),
-            justify="left",
-            foreground="#555",
-        )
-        subtitle.pack(anchor="w", padx=18)
+    def _build(self) -> None:
+        self._build_titlebar()
 
-        # Provider picker
-        provider_frame = ttk.LabelFrame(self.root, text="LLM Provider")
-        provider_frame.pack(fill="x", **pad)
+        body = tk.Frame(self.root, bg=T["bg"])
+        body.pack(fill="both", expand=True, padx=24, pady=(8, 0))
 
-        for pid, info in _PROVIDER_INFO.items():
-            ttk.Radiobutton(
-                provider_frame,
-                text=info["label"],
-                value=pid,
-                variable=self._provider_var,
-                command=self._refresh_provider_hint,
-            ).pack(anchor="w", padx=10, pady=2)
+        # Subtitle
+        tk.Label(
+            body,
+            text=("Bring your own LLM API key. The key is stored only on this\n"
+                  "machine, in %APPDATA%\\CalendarTaskAI\\data\\config.json."),
+            bg=T["bg"], fg=T["fg_muted"],
+            font=("Segoe UI", 9), justify="left",
+        ).pack(anchor="w", pady=(8, 14))
 
-        # API key input
-        key_frame = ttk.LabelFrame(self.root, text="API Key")
-        key_frame.pack(fill="x", **pad)
+        self._build_provider_section(body)
+        self._build_key_section(body)
+        self._build_status_line(body)
+        self._build_footer()
 
-        # readonly trick to suppress Chrome/Edge autofill on password fields
-        self._key_entry = ttk.Entry(
-            key_frame, textvariable=self._key_var, show="*", width=60
-        )
-        self._key_entry.configure(state="readonly")
-        self._key_entry.pack(fill="x", padx=10, pady=(8, 4))
-        self._key_entry.bind("<FocusIn>", lambda _e: self._key_entry.configure(state="normal"))
-
-        hint_row = ttk.Frame(key_frame)
-        hint_row.pack(fill="x", padx=10, pady=(0, 8))
-
-        self._hint_label = ttk.Label(
-            hint_row, text="", foreground="#0066cc", cursor="hand2"
-        )
-        self._hint_label.pack(side="left")
-        self._hint_label.bind("<Button-1>", self._open_key_url)
-
-        ttk.Label(
-            hint_row,
-            text="Stored locally in %APPDATA%\\CalendarTaskAI\\data\\config.json",
-            foreground="#888",
-        ).pack(side="right")
-
-        self._refresh_provider_hint()
-
-        # Status / error line
-        self._status_var = tk.StringVar(value="")
-        ttk.Label(
-            self.root, textvariable=self._status_var, foreground="#c00"
-        ).pack(anchor="w", padx=18)
-
-        # Buttons
-        btn_row = ttk.Frame(self.root)
-        btn_row.pack(side="bottom", fill="x", padx=18, pady=18)
-
-        ttk.Button(btn_row, text="Cancel", command=self._on_cancel).pack(side="right")
-        ttk.Button(btn_row, text="Save", command=self._on_save, default="active").pack(
-            side="right", padx=(0, 8)
-        )
-
-        # Enter key submits
         self.root.bind("<Return>", lambda _e: self._on_save())
         self.root.bind("<Escape>", lambda _e: self._on_cancel())
 
-    def _refresh_provider_hint(self) -> None:
-        info = _PROVIDER_INFO[self._provider_var.get()]
-        self._hint_label.configure(text=f"Get a {info['label']} API key →")
+    def _build_titlebar(self) -> None:
+        bar = tk.Frame(self.root, bg=T["title_bg"], height=56)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        tk.Label(
+            bar,
+            text="Welcome to CalendarTaskAI",
+            bg=T["title_bg"], fg=T["title_fg"],
+            font=("Segoe UI", 14, "bold"),
+        ).pack(side="left", padx=20)
+
+    def _build_provider_section(self, parent: tk.Widget) -> None:
+        tk.Label(
+            parent, text="LLM Provider",
+            bg=T["bg"], fg=T["fg"],
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        self._provider_cards: dict[str, tk.Frame] = {}
+        for pid, display in list_providers():
+            card = self._make_provider_card(parent, pid, display)
+            card.pack(fill="x", pady=4)
+            self._provider_cards[pid] = card
+
+        self._refresh_provider_cards()
+
+    def _make_provider_card(self, parent: tk.Widget, pid: str, display: str) -> tk.Frame:
+        meta = _PROVIDER_META.get(pid, {})
+        tagline = meta.get("tagline", "")
+
+        # Card with subtle border; selected card gets a stronger border
+        card = tk.Frame(parent, bg=T["surface"], highlightthickness=1,
+                        highlightbackground=T["border"])
+
+        inner = tk.Frame(card, bg=T["surface"])
+        inner.pack(fill="x", padx=14, pady=10)
+
+        rb = tk.Radiobutton(
+            inner, text=display, value=pid, variable=self._provider_var,
+            bg=T["surface"], fg=T["fg"],
+            activebackground=T["surface"], activeforeground=T["fg"],
+            selectcolor=T["surface"],
+            font=("Segoe UI", 10, "bold"),
+            cursor="hand2",
+        )
+        rb.pack(anchor="w")
+
+        if tagline:
+            tk.Label(
+                inner, text=tagline,
+                bg=T["surface"], fg=T["fg_muted"],
+                font=("Segoe UI", 9),
+            ).pack(anchor="w", padx=22)
+
+        # Click anywhere on the card to select that provider
+        for w in (card, inner):
+            w.bind("<Button-1>", lambda _e, p=pid: self._provider_var.set(p))
+        return card
+
+    def _build_key_section(self, parent: tk.Widget) -> None:
+        tk.Label(
+            parent, text="API Key",
+            bg=T["bg"], fg=T["fg"],
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", pady=(14, 6))
+
+        row = tk.Frame(parent, bg=T["bg"])
+        row.pack(fill="x")
+
+        # Use a `readonly` trick to suppress browser autofill for password
+        # fields; the entry becomes editable on first focus.
+        self._key_entry = tk.Entry(
+            row, textvariable=self._key_var, show="•", width=40,
+            bg=T["surface"], fg=T["fg"],
+            insertbackground=T["fg"],
+            relief="flat", highlightthickness=1,
+            highlightbackground=T["border"], highlightcolor=T["border_strong"],
+            font=("Segoe UI", 10),
+        )
+        self._key_entry.configure(state="readonly")
+        self._key_entry.pack(side="left", fill="x", expand=True, ipady=6)
+        self._key_entry.bind(
+            "<FocusIn>", lambda _e: self._key_entry.configure(state="normal"))
+        self._key_var.trace_add("write", lambda *_: self._reset_status())
+
+        self._test_btn = tk.Button(
+            row, text="Test", command=self._on_test,
+            bg=T["surface_alt"], fg=T["fg"],
+            activebackground=T["border"], activeforeground=T["fg"],
+            relief="flat", cursor="hand2",
+            font=("Segoe UI", 9), padx=14, pady=4,
+        )
+        self._test_btn.pack(side="left", padx=(8, 0))
+
+        # Helper row: link to provider key page + storage reassurance
+        helper = tk.Frame(parent, bg=T["bg"])
+        helper.pack(fill="x", pady=(6, 0))
+
+        self._key_link = tk.Label(
+            helper, text="", bg=T["bg"], fg=T["link"],
+            cursor="hand2", font=("Segoe UI", 9, "underline"),
+        )
+        self._key_link.pack(side="left")
+        self._key_link.bind("<Button-1>", self._open_key_url)
+
+        tk.Label(
+            helper,
+            text="🔒 stored locally only",
+            bg=T["bg"], fg=T["fg_muted"],
+            font=("Segoe UI", 8),
+        ).pack(side="right")
+
+        self._refresh_key_link()
+
+    def _build_status_line(self, parent: tk.Widget) -> None:
+        self._status_var = tk.StringVar(value="Click Test to verify your key.")
+        self._status_label = tk.Label(
+            parent, textvariable=self._status_var,
+            bg=T["bg"], fg=T["fg_muted"],
+            font=("Segoe UI", 9), anchor="w", justify="left",
+        )
+        self._status_label.pack(fill="x", pady=(16, 0))
+
+    def _build_footer(self) -> None:
+        footer = tk.Frame(self.root, bg=T["bg"])
+        footer.pack(side="bottom", fill="x", padx=24, pady=18)
+
+        save = tk.Button(
+            footer, text="Save", command=self._on_save,
+            bg=T["accent"], fg=T["accent_text"],
+            activebackground=T["accent_dark"], activeforeground=T["accent_text"],
+            relief="flat", cursor="hand2",
+            font=("Segoe UI", 10, "bold"), padx=22, pady=6,
+        )
+        save.pack(side="right")
+
+        cancel = tk.Button(
+            footer, text="Cancel", command=self._on_cancel,
+            bg=T["surface_alt"], fg=T["fg"],
+            activebackground=T["border"], activeforeground=T["fg"],
+            relief="flat", cursor="hand2",
+            font=("Segoe UI", 10), padx=18, pady=6,
+        )
+        cancel.pack(side="right", padx=(0, 8))
+
+    # ----------------------------------------------------------- callbacks
+
+    def _on_provider_change(self) -> None:
+        self._refresh_provider_cards()
+        self._refresh_key_link()
+
+        # Populate the key field with whatever's already stored for this
+        # provider, so revisiting the wizard preserves prior keys.
+        cfg = load_config()
+        meta = _PROVIDER_META[self._provider_var.get()]
+        self._key_var.set(cfg.get(meta["key_field"], ""))
+        self._reset_status()
+
+    def _refresh_provider_cards(self) -> None:
+        active = self._provider_var.get()
+        for pid, card in self._provider_cards.items():
+            color = T["border_strong"] if pid == active else T["border"]
+            card.configure(highlightbackground=color, highlightcolor=color)
+
+    def _refresh_key_link(self) -> None:
+        meta = _PROVIDER_META[self._provider_var.get()]
+        provider_label = next((d for p, d in list_providers()
+                               if p == self._provider_var.get()), "")
+        self._key_link.configure(text=f"Get a {provider_label} API key →")
+        self._key_link._url = meta["key_url"]  # stash for the click handler
 
     def _open_key_url(self, _event=None) -> None:
-        info = _PROVIDER_INFO[self._provider_var.get()]
+        url = getattr(self._key_link, "_url", None)
+        if not url:
+            return
         try:
-            webbrowser.open(info["key_url"])
+            webbrowser.open(url)
         except Exception:
-            log.exception("Failed to open URL %s", info["key_url"])
+            log.exception("Failed to open URL %s", url)
+
+    def _reset_status(self) -> None:
+        self._set_status("Click Test to verify your key.", kind="info")
+
+    def _set_status(self, text: str, *, kind: str) -> None:
+        icon = {"ok": "✓ ", "warn": "⚠ ", "error": "✗ ", "info": ""}.get(kind, "")
+        color = {
+            "ok": T["success"],
+            "warn": T["warning"],
+            "error": T["error"],
+            "info": T["fg_muted"],
+        }.get(kind, T["fg_muted"])
+        self._status_kind = kind
+        self._status_var.set(icon + text)
+        self._status_label.configure(fg=color)
+
+    def _on_test(self) -> None:
+        if self._test_thread and self._test_thread.is_alive():
+            return  # guard against double-click
+
+        key = self._key_var.get().strip()
+        if not key:
+            self._set_status("Enter an API key first.", kind="warn")
+            return
+
+        # Build a transient provider with the in-flight values (don't persist
+        # to disk just because the user clicked Test).
+        cfg = self._build_transient_config(key)
+        self._test_btn.configure(text="Testing…", state="disabled")
+        self._set_status("Contacting the provider...", kind="info")
+
+        def _worker():
+            try:
+                provider = get_provider(cfg)
+                ok, msg = provider.test_connection()
+            except NotConfigured as e:
+                ok, msg = False, str(e)
+            except Exception as e:  # connection / SDK / parse
+                log.exception("Test connection failed")
+                ok, msg = False, f"{type(e).__name__}: {e}"
+
+            def _apply():
+                self._test_btn.configure(text="Test", state="normal")
+                self._set_status(msg, kind="ok" if ok else "error")
+
+            self.root.after(0, _apply)
+
+        self._test_thread = threading.Thread(target=_worker, daemon=True)
+        self._test_thread.start()
+
+    def _build_transient_config(self, key: str) -> dict:
+        """Compose a config dict with the in-flight key for the active
+        provider, leaving everything else at defaults from disk."""
+        cfg = load_config()
+        cfg["llm_provider"] = self._provider_var.get()
+        meta = _PROVIDER_META[self._provider_var.get()]
+        cfg[meta["key_field"]] = key
+        return cfg
 
     def _on_save(self) -> None:
         provider = self._provider_var.get()
         key = self._key_var.get().strip()
-
         if not key:
-            self._status_var.set("API key is required.")
+            self._set_status("API key is required.", kind="error")
             return
 
-        config = load_config()
-        config["llm_provider"] = provider
-        config[_PROVIDER_INFO[provider]["key_field"]] = key
+        cfg = load_config()
+        cfg["llm_provider"] = provider
+        cfg[_PROVIDER_META[provider]["key_field"]] = key
+
         try:
-            save_config(config)
+            save_config(cfg)
         except Exception as e:
             log.exception("Failed to save config")
-            self._status_var.set(f"Could not save config: {e}")
+            self._set_status(f"Could not save: {e}", kind="error")
             return
 
         log.info("Setup wizard completed (provider=%s)", provider)
@@ -188,11 +376,11 @@ class _SetupWizard:
         self.completed = False
         self.root.destroy()
 
+    # -------------------------------------------------------------- driver
+
     def run(self) -> None:
         self.root.mainloop()
 
 
 if __name__ == "__main__":
-    # Manual test
-    ok = run_setup_wizard()
-    print("completed:", ok)
+    print("completed:", run_setup_wizard())
