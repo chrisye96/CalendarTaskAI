@@ -2,7 +2,7 @@
 # exists so editors, type checkers, and pytest pick up consistent settings.
 [project]
 name = "calendartaskai"
-version = "0.2.0"
+version = "1.0.0"
 description = "AI-powered task scheduling plugin for DesktopCal"
 readme = "README.md"
 requires-python = ">=3.10"

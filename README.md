@@ -32,17 +32,31 @@ CalendarTaskAI is an intelligent task scheduling assistant that integrates with 
 
 ---
 
-## Installation
+## Download (no Python required)
 
-1. **Navigate to the project directory:**
+> The repository is currently private. The download and clone links below activate after the v1.0.0 launch.
+
+Pre-built Windows binaries are attached to every [GitHub Release](https://github.com/chrisye96/CalendarTaskAI/releases):
+
+1. Download `CalendarTaskAI-vX.Y.Z.zip` from the latest release.
+2. Extract to a folder of your choice (e.g. `C:\Apps\CalendarTaskAI`).
+3. Double-click `CalendarTaskAI.exe` for the GUI (tray + hotkey).
+4. Use `CalendarTaskAI-cli.exe today` (or any other CLI command) from a command prompt.
+
+The bundle is unsigned, so Windows SmartScreen may warn on first launch — click "More info" → "Run anyway". This will be resolved when we add code signing in a future release.
+
+## Installation from source (Python developers)
+
+1. **Clone the repository:**
    ```powershell
-   cd "$env:APPDATA\CalendarTaskAI"
+   git clone https://github.com/chrisye96/CalendarTaskAI.git
+   cd CalendarTaskAI
    ```
 
 2. **Create a virtual environment (recommended):**
    ```powershell
-   python -m venv venv
-   .\venv\Scripts\activate
+   python -m venv .venv
+   .\.venv\Scripts\activate
    ```
 
 3. **Install dependencies:**
@@ -56,6 +70,24 @@ CalendarTaskAI is an intelligent task scheduling assistant that integrates with 
    - `Pillow` - Image processing for tray icon
    - `keyboard` - Global hotkey support
    - `click` - CLI framework
+
+4. **Run:**
+   ```powershell
+   pythonw main.py        # GUI (no console)
+   python main.py today   # CLI command
+   ```
+
+## Building your own Windows executable
+
+```powershell
+pip install -r requirements-dev.txt
+python build_release.py
+# Output: dist/CalendarTaskAI/  (the bundle) + dist/CalendarTaskAI-vX.Y.Z.zip
+```
+
+The build runs the `pytest` suite first; a failing test fails the build.
+
+Pushing a `v*` git tag (e.g. `git tag v1.0.0 && git push --tags`) triggers the same build via GitHub Actions and creates a draft release with the artifact attached.
 
 ---
 
