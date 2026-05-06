@@ -63,6 +63,12 @@ Users may input tasks in various formats. You must intelligently parse and split
 - Day of week: 周一~周日, 星期一~星期天, 礼拜一~礼拜天
 - English: today, tonight, tomorrow, next week, next Monday~Sunday, in 3 days, end of month, etc.
 
+**Time-of-day hints that may appear within task text:**
+- 24-hour: 9:00, 14:30
+- 12-hour with AM/PM: 9am, 3:30pm
+- Chinese: 9点, 9点半, 9点30分, 上午9点, 下午3点, 晚上9点, 凌晨2点, 中午12点
+- Ranges: 9-10点, 9点-10点, 9:00-10:30, 上午9-11点, 下午3-5点, 9am-11am
+
 ## Instructions
 1. **Parse and split tasks intelligently:**
    - Split input by recognized separators (newlines, commas, semicolons, enumeration commas)
@@ -75,22 +81,27 @@ Users may input tasks in various formats. You must intelligently parse and split
    - Extract the date hint and REMOVE it from the task text (return only the action portion)
    - Examples: "明天买菜" -> date=tomorrow, task="买菜"; "下周一开会" -> date=next Monday, task="开会"
 
-3. **For tasks WITHOUT date hints, assign intelligently based on:**
+3. **Time-of-day handling:**
+   - If a task starts with `[HH:MM]` or `[HH:MM-HH:MM]` (e.g. `[09:00] standup`), KEEP that prefix EXACTLY as-is — never reformat, reorder, or remove it.
+   - **Do NOT generate new `[HH:MM]` prefixes yourself.** A deterministic time parser handles the supported formats before this prompt runs; if a task you receive has no such prefix, it means the parser couldn't recognize a time and you should leave the task text alone. Inventing a prefix risks formats like `[9:00]` (missing zero-pad) or `[9-10]` (missing minutes), which break downstream display.
+   - In short: **preserve, never produce.**
+
+4. **For tasks WITHOUT date hints, assign intelligently based on:**
    - The user's profile, habits, and scheduling rules
    - Current task load on each date (avoid overloading busy days)
    - Task urgency and estimated effort
    - The user's observed behavioral patterns and preferences
 
-4. You may assign tasks to ANY future date - there is no hard limit. Use your judgment based on task nature.
+5. You may assign tasks to ANY future date - there is no hard limit. Use your judgment based on task nature.
 
-5. PRESERVE the user's original language - do NOT translate task descriptions.
+6. PRESERVE the user's original language - do NOT translate task descriptions.
 
-6. Handle each task independently - different tasks can have different dates.
+7. Handle each task independently - different tasks can have different dates.
 
 ## Output Format
 Respond with ONLY a JSON array, no other text:
 [
-  {{"date": "YYYY-MM-DD", "task": "task text without date hint"}}
+  {{"date": "YYYY-MM-DD", "task": "task text. If the input already started with [HH:MM] / [HH:MM-HH:MM], preserve that prefix verbatim. Otherwise no prefix."}}
 ]
 """
     return system_prompt, user_input

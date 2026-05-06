@@ -626,8 +626,76 @@ def search_tasks(keyword: str, db_path: str = None) -> list[dict]:
                         })
         
         return results
-    
+
     return _execute_with_retry(query)
+
+
+def remove_specific_tasks(items: list[dict], db_path: str = None) -> int:
+    """Remove specific (date, task_text) entries by exact line match.
+
+    Used by the undo flow: if the user said "add these N tasks" and we
+    recorded the exact texts, this removes only those. Substring matches
+    don't apply — "买菜" won't match "买菜单".
+
+    For each (date, text) pair, the FIRST line on that date whose parsed
+    text equals `text` is removed. Done state is ignored: a `[+]task` line
+    parses to `task`, so undo still finds it after the user marked it done.
+
+    Args:
+        items: list of {"date": "YYYY-MM-DD", "task": "exact line text"}.
+        db_path: optional override.
+
+    Returns:
+        Number of lines actually removed.
+    """
+    if db_path is None:
+        db_path = _get_db_path()
+    if not items:
+        return 0
+
+    by_date: dict[str, list[str]] = {}
+    for item in items:
+        by_date.setdefault(item["date"], []).append(item["task"])
+
+    def update():
+        removed = 0
+        with sqlite3.connect(db_path) as conn:
+            for date_str, target_texts in by_date.items():
+                unique_id = _date_to_unique_id(date_str)
+                cursor = conn.execute(
+                    "SELECT it_id, it_content FROM item_table WHERE it_unique_id = ?",
+                    (unique_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    continue
+                it_id, content = row
+                if not content:
+                    continue
+
+                # Multiset semantics: each target text removes one matching
+                # line. Repeats in target_texts remove repeats in DB.
+                remaining_targets: list[str] = list(target_texts)
+                tasks = _parse_tasks(content)
+                kept: list[dict] = []
+                for t in tasks:
+                    if t["text"] in remaining_targets:
+                        remaining_targets.remove(t["text"])
+                        removed += 1
+                    else:
+                        kept.append(t)
+
+                if len(kept) != len(tasks):
+                    new_content = _tasks_to_content(kept)
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    conn.execute(
+                        "UPDATE item_table SET it_content = ?, it_mdate = ? WHERE it_id = ?",
+                        (new_content, now, it_id),
+                    )
+            conn.commit()
+        return removed
+
+    return _execute_with_retry(update)
 
 
 def export_tasks(start_date: str, end_date: str, fmt: str = "md", db_path: str = None) -> str:

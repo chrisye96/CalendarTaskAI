@@ -112,7 +112,7 @@ def start_gui() -> None:
     input_window = TaskInputWindow(root)
 
     from tray import TrayManager
-    tray = TrayManager(root, input_window.show)
+    tray = TrayManager(root, input_window)
     tray.start()
 
     # 5. Register the global hotkey (best-effort: app still works without it).
