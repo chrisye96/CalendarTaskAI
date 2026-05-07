@@ -26,12 +26,28 @@ DEFAULT_DB_PATH = os.path.join(os.getenv('APPDATA', ''), 'CalendarTask', 'Db', '
 
 # Default config. BYOK: API keys are empty by default; users must configure on first run.
 DEFAULT_CONFIG = {
-    # Provider selection
-    "llm_provider": "gemini",  # "gemini" | "deepseek"
+    # Provider selection. One of:
+    #   "gemini"   - Google Gemini (default; free tier)
+    #   "openai"   - ChatGPT
+    #   "claude"   - Anthropic Claude
+    #   "deepseek" - DeepSeek (cheap, mainland-China-friendly)
+    #   "kimi"     - Moonshot AI (mainland-China-friendly, free tier)
+    "llm_provider": "gemini",
 
     # Gemini
     "gemini_api_key": "",
     "gemini_model": "gemini-3.1-flash-lite-preview",
+
+    # OpenAI / ChatGPT
+    "openai_api_key": "",
+    "openai_model": "gpt-4o",
+    "openai_endpoint": "https://api.openai.com/v1",
+
+    # Anthropic Claude
+    "claude_api_key": "",
+    "claude_model": "claude-sonnet-4-6",
+    "claude_endpoint": "https://api.anthropic.com/v1",
+    "claude_max_tokens": 2048,  # Anthropic API requires max_tokens
 
     # DeepSeek (endpoint and pro/flash threshold; api key empty until user configures)
     "deepseek_api_key": "",
@@ -39,6 +55,11 @@ DEFAULT_CONFIG = {
     "deepseek_model_pro": "deepseek-v4-pro",
     "deepseek_endpoint": "https://api.deepseek.com/v1",
     "deepseek_pro_threshold": 5,  # use pro when unresolved task count exceeds this
+
+    # Kimi (Moonshot AI)
+    "kimi_api_key": "",
+    "kimi_model": "moonshot-v1-32k",
+    "kimi_endpoint": "https://api.moonshot.cn/v1",
 
     # App behavior
     "hotkey": "ctrl+alt+space",

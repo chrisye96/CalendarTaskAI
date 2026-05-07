@@ -34,17 +34,32 @@ log = get_logger(__name__)
 T: dict[str, str] = current_theme()
 
 # Where each provider sends users to claim a key, and which config field
-# stores it. Order here also drives the radio order.
+# stores it. Order here matches `providers.registry._REGISTRY`.
 _PROVIDER_META = {
     "gemini": {
-        "tagline": "Free tier available. Default for new users.",
+        "tagline": "Google. Free tier; default for new users.",
         "key_url": "https://aistudio.google.com/apikey",
         "key_field": "gemini_api_key",
     },
+    "openai": {
+        "tagline": "OpenAI ChatGPT. Paid; widely available.",
+        "key_url": "https://platform.openai.com/api-keys",
+        "key_field": "openai_api_key",
+    },
+    "claude": {
+        "tagline": "Anthropic Claude. Paid; strong at long context.",
+        "key_url": "https://console.anthropic.com/settings/keys",
+        "key_field": "claude_api_key",
+    },
     "deepseek": {
-        "tagline": "Pro / flash auto-selection by task volume.",
+        "tagline": "DeepSeek. Cheap; auto flash/pro tier switch.",
         "key_url": "https://platform.deepseek.com/api_keys",
         "key_field": "deepseek_api_key",
+    },
+    "kimi": {
+        "tagline": "Moonshot Kimi. Free tier; mainland-China-friendly.",
+        "key_url": "https://platform.moonshot.cn/console/api-keys",
+        "key_field": "kimi_api_key",
     },
 }
 
