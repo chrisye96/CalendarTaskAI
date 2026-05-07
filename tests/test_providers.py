@@ -10,8 +10,13 @@ from providers import LLMProvider, NotConfigured, get_provider, list_providers
 from providers.claude import ClaudeProvider
 from providers.deepseek import DeepSeekProvider
 from providers.gemini import GeminiProvider
+from providers.glm import GLMProvider
+from providers.grok import GrokProvider
 from providers.kimi import KimiProvider
+from providers.mistral import MistralProvider
 from providers.openai import OpenAIProvider
+from providers.openrouter import OpenRouterProvider
+from providers.qwen import QwenProvider
 
 
 # ---------------------------------------------------------------------------
@@ -21,16 +26,25 @@ from providers.openai import OpenAIProvider
 class TestRegistry:
     def test_lists_all_known_providers(self):
         names = [name for name, _ in list_providers()]
-        # Five providers ship in v1.0.0; this list is an explicit assertion
+        # 10 providers ship in v1.0.0; this list is an explicit assertion
         # rather than a `>=` so adding/removing one fails the test loud.
-        assert names == ["gemini", "openai", "claude", "deepseek", "kimi"]
+        # Order matters: it drives the wizard radio list.
+        assert names == [
+            "gemini", "openai", "claude", "grok", "mistral",
+            "deepseek", "kimi", "qwen", "glm", "openrouter",
+        ]
 
     @pytest.mark.parametrize("name, klass", [
         ("gemini", GeminiProvider),
         ("openai", OpenAIProvider),
         ("claude", ClaudeProvider),
+        ("grok", GrokProvider),
+        ("mistral", MistralProvider),
         ("deepseek", DeepSeekProvider),
         ("kimi", KimiProvider),
+        ("qwen", QwenProvider),
+        ("glm", GLMProvider),
+        ("openrouter", OpenRouterProvider),
     ])
     def test_get_returns_correct_class(self, name, klass):
         p = get_provider({"llm_provider": name})
@@ -59,8 +73,13 @@ class TestNotConfigured:
         (GeminiProvider, "gemini_api_key"),
         (OpenAIProvider, "openai_api_key"),
         (ClaudeProvider, "claude_api_key"),
+        (GrokProvider, "grok_api_key"),
+        (MistralProvider, "mistral_api_key"),
         (DeepSeekProvider, "deepseek_api_key"),
         (KimiProvider, "kimi_api_key"),
+        (QwenProvider, "qwen_api_key"),
+        (GLMProvider, "glm_api_key"),
+        (OpenRouterProvider, "openrouter_api_key"),
     ])
     def test_provider_without_key_raises(self, klass, key_field):
         p = klass({key_field: ""})
@@ -129,10 +148,15 @@ class TestQualityOverrideFlags:
     @pytest.mark.parametrize("klass, key_field", [
         (OpenAIProvider, "openai_api_key"),
         (ClaudeProvider, "claude_api_key"),
+        (GrokProvider, "grok_api_key"),
+        (MistralProvider, "mistral_api_key"),
         (KimiProvider, "kimi_api_key"),
+        (QwenProvider, "qwen_api_key"),
+        (GLMProvider, "glm_api_key"),
+        (OpenRouterProvider, "openrouter_api_key"),
     ])
     def test_single_tier_providers_have_no_quality_override(self, klass, key_field):
-        # OpenAI / Claude / Kimi all use a single configured model. Surfacing a
+        # All single-tier providers use one configured model. Surfacing a
         # "Re-run with Pro" button would be misleading because there's no
         # second tier to escalate to. DeepSeek is the only provider with a
         # built-in flash/pro split.
@@ -174,6 +198,33 @@ class TestOpenAICompatibleConfig:
         p = DeepSeekProvider({})
         assert p.model == "deepseek-v4-flash"
         assert p.pro_model == "deepseek-v4-pro"
+
+    @pytest.mark.parametrize("klass, expected_endpoint, expected_model", [
+        (GrokProvider, "https://api.x.ai/v1", "grok-4"),
+        (MistralProvider, "https://api.mistral.ai/v1", "mistral-large-latest"),
+        (QwenProvider,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
+        (GLMProvider, "https://open.bigmodel.cn/api/paas/v4", "glm-4.6"),
+        (OpenRouterProvider,
+            "https://openrouter.ai/api/v1", "openrouter/auto"),
+    ])
+    def test_new_provider_defaults(self, klass, expected_endpoint, expected_model):
+        # Lock the v1.0 default endpoints and models so a future code edit
+        # that drifts away from the documented values fails loudly.
+        p = klass({})
+        assert p.endpoint == expected_endpoint
+        assert p.model == expected_model
+
+    @pytest.mark.parametrize("klass, model_field, override", [
+        (GrokProvider, "grok_model", "grok-4-fast"),
+        (MistralProvider, "mistral_model", "mistral-small-latest"),
+        (QwenProvider, "qwen_model", "qwen3-max"),
+        (GLMProvider, "glm_model", "glm-5"),
+        (OpenRouterProvider, "openrouter_model", "anthropic/claude-opus-4-7"),
+    ])
+    def test_new_provider_model_override(self, klass, model_field, override):
+        p = klass({model_field: override})
+        assert p.model == override
 
 
 # ---------------------------------------------------------------------------

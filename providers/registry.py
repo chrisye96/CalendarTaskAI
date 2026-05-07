@@ -11,18 +11,30 @@ from .base import LLMProvider
 from .claude import ClaudeProvider
 from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
+from .glm import GLMProvider
+from .grok import GrokProvider
 from .kimi import KimiProvider
+from .mistral import MistralProvider
 from .openai import OpenAIProvider
+from .openrouter import OpenRouterProvider
+from .qwen import QwenProvider
 
 # Order matters: this is the order shown in the setup wizard radio list
-# and in `list_providers()`. Free-tier-first ordering nudges new users
-# toward providers they can sign up for without a credit card.
+# and in `list_providers()`. We group by region/style so the wizard reads
+# top-to-bottom: free-tier-first Western providers, then paid Western,
+# then the China cluster (Kimi/Qwen/GLM share an audience), then the
+# OpenRouter aggregator at the bottom for users who want everything else.
 _REGISTRY: dict[str, type[LLMProvider]] = {
-    GeminiProvider.name:   GeminiProvider,    # Google, free tier available
-    OpenAIProvider.name:   OpenAIProvider,    # paid only, but most well-known
-    ClaudeProvider.name:   ClaudeProvider,    # paid only, strongest at long context
-    DeepSeekProvider.name: DeepSeekProvider,  # cheap, mainland China-friendly
-    KimiProvider.name:     KimiProvider,      # mainland China-friendly, free tier
+    GeminiProvider.name:     GeminiProvider,      # Google, free tier available
+    OpenAIProvider.name:     OpenAIProvider,      # ChatGPT, paid only, most well-known
+    ClaudeProvider.name:     ClaudeProvider,      # Anthropic, paid only, strong long context
+    GrokProvider.name:       GrokProvider,        # xAI, paid; SuperGrok-aligned audience
+    MistralProvider.name:    MistralProvider,     # EU-hosted; open-weight lineage
+    DeepSeekProvider.name:   DeepSeekProvider,    # cheap, mainland-China-friendly
+    KimiProvider.name:       KimiProvider,        # Moonshot, free tier, mainland-friendly
+    QwenProvider.name:       QwenProvider,        # Alibaba DashScope, mainland-friendly
+    GLMProvider.name:        GLMProvider,         # Zhipu, mainland-friendly
+    OpenRouterProvider.name: OpenRouterProvider,  # 300+ models behind one key
 }
 
 
