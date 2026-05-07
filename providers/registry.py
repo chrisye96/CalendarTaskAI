@@ -8,12 +8,21 @@ Adding a new provider:
 from __future__ import annotations
 
 from .base import LLMProvider
+from .claude import ClaudeProvider
 from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
+from .kimi import KimiProvider
+from .openai import OpenAIProvider
 
+# Order matters: this is the order shown in the setup wizard radio list
+# and in `list_providers()`. Free-tier-first ordering nudges new users
+# toward providers they can sign up for without a credit card.
 _REGISTRY: dict[str, type[LLMProvider]] = {
-    GeminiProvider.name: GeminiProvider,
-    DeepSeekProvider.name: DeepSeekProvider,
+    GeminiProvider.name:   GeminiProvider,    # Google, free tier available
+    OpenAIProvider.name:   OpenAIProvider,    # paid only, but most well-known
+    ClaudeProvider.name:   ClaudeProvider,    # paid only, strongest at long context
+    DeepSeekProvider.name: DeepSeekProvider,  # cheap, mainland China-friendly
+    KimiProvider.name:     KimiProvider,      # mainland China-friendly, free tier
 }
 
 
