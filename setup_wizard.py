@@ -51,6 +51,16 @@ _PROVIDER_META = {
         "key_url": "https://console.anthropic.com/settings/keys",
         "key_field": "claude_api_key",
     },
+    "grok": {
+        "tagline": "xAI Grok. Paid; SuperGrok / X account-aligned.",
+        "key_url": "https://console.x.ai/",
+        "key_field": "grok_api_key",
+    },
+    "mistral": {
+        "tagline": "Mistral AI. EU-hosted; open-weight lineage.",
+        "key_url": "https://console.mistral.ai/api-keys",
+        "key_field": "mistral_api_key",
+    },
     "deepseek": {
         "tagline": "DeepSeek. Cheap; auto flash/pro tier switch.",
         "key_url": "https://platform.deepseek.com/api_keys",
@@ -60,6 +70,21 @@ _PROVIDER_META = {
         "tagline": "Moonshot Kimi. Free tier; mainland-China-friendly.",
         "key_url": "https://platform.moonshot.cn/console/api-keys",
         "key_field": "kimi_api_key",
+    },
+    "qwen": {
+        "tagline": "Alibaba Qwen via DashScope. Mainland-friendly.",
+        "key_url": "https://bailian.console.aliyun.com/?tab=model#/api-key",
+        "key_field": "qwen_api_key",
+    },
+    "glm": {
+        "tagline": "Zhipu GLM (Z.ai). Tops Chinese benchmarks.",
+        "key_url": "https://open.bigmodel.cn/usercenter/apikeys",
+        "key_field": "glm_api_key",
+    },
+    "openrouter": {
+        "tagline": "300+ models behind one key (auto-route by default).",
+        "key_url": "https://openrouter.ai/keys",
+        "key_field": "openrouter_api_key",
     },
 }
 
@@ -81,14 +106,14 @@ class _SetupWizard:
 
         self.root = tk.Tk()
         self.root.title("CalendarTaskAI — Setup")
-        self.root.geometry("560x540")
+        self.root.geometry("560x600")
         self.root.resizable(False, False)
         self.root.configure(bg=T["bg"])
 
         # Center on screen
         self.root.update_idletasks()
         x = (self.root.winfo_screenwidth() - 560) // 2
-        y = (self.root.winfo_screenheight() - 540) // 2
+        y = (self.root.winfo_screenheight() - 600) // 2
         self.root.geometry(f"+{x}+{y}")
 
         config = load_config()
@@ -152,10 +177,46 @@ class _SetupWizard:
             font=("Segoe UI", 10, "bold"),
         ).pack(anchor="w", pady=(0, 6))
 
+        # Scrollable container so the wizard fits 720p screens even with
+        # 10+ providers. Canvas holds the cards Frame; vertical scrollbar
+        # appears on the right. ~300px height lets the user see roughly 5
+        # cards at once and scroll for the rest.
+        outer = tk.Frame(parent, bg=T["bg"])
+        outer.pack(fill="x")
+
+        canvas = tk.Canvas(
+            outer, bg=T["bg"], highlightthickness=0, height=300,
+        )
+        scrollbar = tk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="x", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        cards_frame = tk.Frame(canvas, bg=T["bg"])
+        # `anchor="nw"` and explicit width-syncing keep cards full-width
+        # inside the canvas regardless of the outer frame's reported size.
+        window_id = canvas.create_window((0, 0), window=cards_frame, anchor="nw")
+
+        def _sync_width(event):
+            canvas.itemconfigure(window_id, width=event.width)
+        canvas.bind("<Configure>", _sync_width)
+
+        def _update_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        cards_frame.bind("<Configure>", _update_scrollregion)
+
+        # Mousewheel scrolls the canvas only when the cursor is over it,
+        # so it doesn't fight with future scroll regions elsewhere on the
+        # page. Bind on enter / unbind on leave is the idiomatic pattern.
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-event.delta / 120), "units")
+        canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+
         self._provider_cards: dict[str, tk.Frame] = {}
         for pid, display in list_providers():
-            card = self._make_provider_card(parent, pid, display)
-            card.pack(fill="x", pady=4)
+            card = self._make_provider_card(cards_frame, pid, display)
+            card.pack(fill="x", pady=4, padx=2)
             self._provider_cards[pid] = card
 
         self._refresh_provider_cards()
