@@ -13,6 +13,9 @@ single field and default to the balanced middle tier.
 Region note: international users can swap `qwen_endpoint` to
 `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (Singapore) or
 `https://dashscope-us.aliyuncs.com/compatible-mode/v1` (US Virginia).
+The intl model catalog can lag the mainland one by days to weeks; if a
+specific model name 404s on intl, fall back to mainland or override
+`qwen_model` to whatever the intl endpoint currently exposes.
 """
 from __future__ import annotations
 

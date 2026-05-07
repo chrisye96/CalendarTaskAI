@@ -205,13 +205,17 @@ class _SetupWizard:
             canvas.configure(scrollregion=canvas.bbox("all"))
         cards_frame.bind("<Configure>", _update_scrollregion)
 
-        # Mousewheel scrolls the canvas only when the cursor is over it,
-        # so it doesn't fight with future scroll regions elsewhere on the
-        # page. Bind on enter / unbind on leave is the idiomatic pattern.
+        # Mousewheel scrolls the canvas as long as the wizard has focus.
+        # We bind on the wizard root instead of `bind_all` + Enter/Leave
+        # because (a) Tk's <Leave> fires when the cursor crosses into any
+        # child widget, which would silently disable scrolling over the
+        # provider cards, and (b) bind_all leaks past root destruction if
+        # the wizard is closed while the cursor is over the canvas. Since
+        # the wizard has no other scrollable region, scoping to root is
+        # both simpler and correct.
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-event.delta / 120), "units")
-        canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
-        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+        self.root.bind("<MouseWheel>", _on_mousewheel)
 
         self._provider_cards: dict[str, tk.Frame] = {}
         for pid, display in list_providers():
