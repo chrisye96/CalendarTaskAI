@@ -27,11 +27,16 @@ DEFAULT_DB_PATH = os.path.join(os.getenv('APPDATA', ''), 'CalendarTask', 'Db', '
 # Default config. BYOK: API keys are empty by default; users must configure on first run.
 DEFAULT_CONFIG = {
     # Provider selection. One of:
-    #   "gemini"   - Google Gemini (default; free tier)
-    #   "openai"   - ChatGPT
-    #   "claude"   - Anthropic Claude
-    #   "deepseek" - DeepSeek (cheap, mainland-China-friendly)
-    #   "kimi"     - Moonshot AI (mainland-China-friendly, free tier)
+    #   "gemini"     - Google Gemini (default; free tier)
+    #   "openai"     - ChatGPT
+    #   "claude"     - Anthropic Claude
+    #   "grok"       - xAI Grok
+    #   "mistral"    - Mistral AI (EU-hosted)
+    #   "deepseek"   - DeepSeek (cheap, mainland-China-friendly)
+    #   "kimi"       - Moonshot AI (mainland-China-friendly, free tier)
+    #   "qwen"       - Alibaba Qwen via DashScope (mainland-China-friendly)
+    #   "glm"        - Zhipu GLM (mainland-China-friendly)
+    #   "openrouter" - OpenRouter aggregator (300+ models behind one key)
     "llm_provider": "gemini",
 
     # Gemini
@@ -49,6 +54,16 @@ DEFAULT_CONFIG = {
     "claude_endpoint": "https://api.anthropic.com/v1",
     "claude_max_tokens": 2048,  # Anthropic API requires max_tokens
 
+    # xAI Grok
+    "grok_api_key": "",
+    "grok_model": "grok-4",
+    "grok_endpoint": "https://api.x.ai/v1",
+
+    # Mistral AI
+    "mistral_api_key": "",
+    "mistral_model": "mistral-large-latest",
+    "mistral_endpoint": "https://api.mistral.ai/v1",
+
     # DeepSeek (endpoint and pro/flash threshold; api key empty until user configures)
     "deepseek_api_key": "",
     "deepseek_model_flash": "deepseek-v4-flash",
@@ -60,6 +75,26 @@ DEFAULT_CONFIG = {
     "kimi_api_key": "",
     "kimi_model": "moonshot-v1-32k",
     "kimi_endpoint": "https://api.moonshot.cn/v1",
+
+    # Alibaba Qwen via DashScope (OpenAI-compatible mode)
+    # Mainland endpoint by default; international users can switch to
+    # dashscope-intl.aliyuncs.com (Singapore) or dashscope-us.aliyuncs.com.
+    "qwen_api_key": "",
+    "qwen_model": "qwen-plus",
+    "qwen_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+
+    # Zhipu GLM (Z.ai)
+    "glm_api_key": "",
+    "glm_model": "glm-4.6",
+    "glm_endpoint": "https://open.bigmodel.cn/api/paas/v4",
+
+    # OpenRouter (aggregator: 300+ models)
+    # `openrouter/auto` lets OpenRouter route each prompt to a fitting
+    # model; users can override to a specific model id like
+    # `anthropic/claude-opus-4-7` or `meta-llama/llama-4-maverick`.
+    "openrouter_api_key": "",
+    "openrouter_model": "openrouter/auto",
+    "openrouter_endpoint": "https://openrouter.ai/api/v1",
 
     # App behavior
     "hotkey": "ctrl+alt+space",
