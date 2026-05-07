@@ -10,11 +10,12 @@ containing a Windows executable bundle.
 
 ### Highlights
 
-- **BYOK across 5 mainstream LLM providers.** Bring your own key for any
-  one of: Google Gemini, OpenAI ChatGPT, Anthropic Claude, DeepSeek, or
-  Moonshot Kimi. The setup wizard lets you pick at first launch and
-  switch later without restarting. New providers plug in by subclassing
-  `LLMProvider`.
+- **BYOK across 10 mainstream LLM providers.** Bring your own key for
+  any of: Google Gemini, OpenAI ChatGPT, Anthropic Claude, xAI Grok,
+  Mistral AI, DeepSeek, Moonshot Kimi, Alibaba Qwen, Zhipu GLM, or
+  OpenRouter (300+ models behind one key). The setup wizard lets you
+  pick at first launch and switch later without restarting. New
+  providers plug in by subclassing `LLMProvider`.
 - **Pluggable provider backend.** Gemini is the default for new users
   (free tier; signup without payment). When a second key is configured,
   Gemini failures auto-fallback to DeepSeek-flash so a flaky API call
@@ -44,13 +45,17 @@ containing a Windows executable bundle.
 
 ### Architecture
 
-- Roughly 25 production Python modules, around 6,000 lines of code.
-- 210 hermetic unit tests covering the parser stack, all 5 providers,
+- Roughly 30 production Python modules, around 6,200 lines of code.
+- 220+ hermetic unit tests covering the parser stack, all 10 providers,
   recurring rules, templates, backup and restore, and theme tokens.
 - Runtime data lives under `%APPDATA%\CalendarTaskAI\` (config, profile,
   history, recurring, templates, last-op, logs); the install location
   is read-only so the same exe, source, or venv build all read the
   same user data.
+- All OpenAI-compatible providers (Grok, Mistral, DeepSeek, Kimi, Qwen,
+  GLM, OpenRouter) share a single ~150-line base class, so adding the
+  next mainstream provider is roughly 25 lines of subclass code plus a
+  default-config entry and a wizard tagline.
 
 ### Deferred to a future release
 
@@ -80,7 +85,8 @@ These can come back in v1.1+ if there is demand.
 CalendarTaskAI is built on top of, and grateful to:
 
 - The **DesktopCal** team for the calendar app this plugin writes into.
-- The five LLM providers it supports out of the box: **Google Gemini,
-  OpenAI, Anthropic Claude, DeepSeek, and Moonshot Kimi.**
+- The ten LLM providers it supports out of the box: **Google Gemini,
+  OpenAI, Anthropic Claude, xAI Grok, Mistral AI, DeepSeek, Moonshot
+  Kimi, Alibaba Qwen, Zhipu GLM, and OpenRouter.**
 - Open-source dependencies that do the heavy lifting: pystray, Pillow,
   keyboard, click, google-genai, PyInstaller.
