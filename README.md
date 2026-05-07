@@ -7,7 +7,7 @@
 [![Build status](https://img.shields.io/github/actions/workflow/status/chrisye96/CalendarTaskAI/release.yml?label=build&logo=githubactions)](https://github.com/chrisye96/CalendarTaskAI/actions/workflows/release.yml)
 
 > **AI-powered task scheduling for [DesktopCal](https://www.desktopcal.com/).**
-> Type tasks naturally in Chinese or English; explicit dates and times are pinned by a deterministic regex parser, anything ambiguous is scheduled by an LLM that knows your calendar load and habits. Unofficial plugin, BYOK (bring your own API key); pick from Gemini, ChatGPT, Claude, DeepSeek, or Kimi.
+> Type tasks naturally in Chinese or English; explicit dates and times are pinned by a deterministic regex parser, anything ambiguous is scheduled by an LLM that knows your calendar load and habits. Unofficial plugin, BYOK (bring your own API key); pick from any of 10 mainstream providers including Gemini, ChatGPT, Claude, Grok, Mistral, DeepSeek, Kimi, Qwen, GLM, or OpenRouter.
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -60,8 +60,13 @@ You need an API key from one of the supported providers. Quick links:
 - [Google Gemini](https://aistudio.google.com/apikey) (free tier)
 - [OpenAI ChatGPT](https://platform.openai.com/api-keys) (paid)
 - [Anthropic Claude](https://console.anthropic.com/settings/keys) (paid)
+- [xAI Grok](https://console.x.ai/) (paid)
+- [Mistral AI](https://console.mistral.ai/api-keys) (EU-hosted)
 - [DeepSeek](https://platform.deepseek.com/api_keys) (cheap)
 - [Moonshot Kimi](https://platform.moonshot.cn/console/api-keys) (free tier)
+- [Alibaba Qwen / DashScope](https://bailian.console.aliyun.com/?tab=model#/api-key) (mainland-friendly)
+- [Zhipu GLM](https://open.bigmodel.cn/usercenter/apikeys) (mainland-friendly)
+- [OpenRouter](https://openrouter.ai/keys) (300+ models, one key)
 
 ---
 
@@ -89,7 +94,7 @@ The result: 70-90% of typical input is resolved without any API call. The leftov
 
 **Scheduling**
 - Deterministic-first: regex resolves explicit hints, LLM handles only the rest
-- Five mainstream LLM providers supported out of the box: Google Gemini, OpenAI ChatGPT, Anthropic Claude, DeepSeek, and Moonshot Kimi
+- 10 mainstream LLM providers supported out of the box: Google Gemini, OpenAI ChatGPT, Anthropic Claude, xAI Grok, Mistral AI, DeepSeek, Moonshot Kimi, Alibaba Qwen, Zhipu GLM, and OpenRouter (300+ models behind one key)
 - Cross-provider auto-fallback: when DeepSeek is configured, a Gemini failure is silently retried on DeepSeek-flash so transient API issues don't lose work
 - Manual escalation buttons in the confirm view: **Re-run with DeepSeek-flash** / **Re-run with DeepSeek Pro**
 - Profile-aware prompting: scheduling rules in `profile.md` are honored by the LLM
@@ -165,7 +170,7 @@ Produces `dist/CalendarTaskAI-vX.Y.Z.zip` after running the test suite. Or push 
 
 The first launch shows a Tkinter wizard:
 
-1. **Pick a provider**: Gemini (free tier) or DeepSeek.
+1. **Pick a provider** from the scrollable list (Gemini is the default for new users; free tier).
 2. Click the "Get a {provider} API key" link to open the provider's key page in your browser.
 3. Paste the key into the masked field.
 4. (Recommended) Click **Test** to make a tiny live API call and confirm the key works.
@@ -271,6 +276,12 @@ All runtime data lives under `%APPDATA%\CalendarTaskAI\`:
   "claude_model": "claude-sonnet-4-6",
   "claude_endpoint": "https://api.anthropic.com/v1",
   "claude_max_tokens": 2048,
+  "grok_api_key": "",
+  "grok_model": "grok-4",
+  "grok_endpoint": "https://api.x.ai/v1",
+  "mistral_api_key": "",
+  "mistral_model": "mistral-large-latest",
+  "mistral_endpoint": "https://api.mistral.ai/v1",
   "deepseek_api_key": "",
   "deepseek_model_flash": "deepseek-v4-flash",
   "deepseek_model_pro": "deepseek-v4-pro",
@@ -279,6 +290,15 @@ All runtime data lives under `%APPDATA%\CalendarTaskAI\`:
   "kimi_api_key": "",
   "kimi_model": "moonshot-v1-32k",
   "kimi_endpoint": "https://api.moonshot.cn/v1",
+  "qwen_api_key": "",
+  "qwen_model": "qwen-plus",
+  "qwen_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "glm_api_key": "",
+  "glm_model": "glm-4.6",
+  "glm_endpoint": "https://open.bigmodel.cn/api/paas/v4",
+  "openrouter_api_key": "",
+  "openrouter_model": "openrouter/auto",
+  "openrouter_endpoint": "https://openrouter.ai/api/v1",
   "hotkey": "ctrl+alt+space",
   "db_path": "%APPDATA%\\CalendarTask\\Db\\calendar.db",
   "auto_start": false,
@@ -292,15 +312,21 @@ All runtime data lives under `%APPDATA%\CalendarTaskAI\`:
 
 | Field | Description |
 |-------|-------------|
-| `llm_provider` | One of `"gemini"`, `"openai"`, `"claude"`, `"deepseek"`, `"kimi"`. Default Gemini. |
+| `llm_provider` | One of `"gemini"`, `"openai"`, `"claude"`, `"grok"`, `"mistral"`, `"deepseek"`, `"kimi"`, `"qwen"`, `"glm"`, `"openrouter"`. Default Gemini. |
 | `<provider>_api_key` | BYOK key for the chosen provider. Never sent off your machine except to that provider. Only the active provider's key is required; the others can stay empty. |
 | `gemini_model` | Exact Gemini model name. 404 surfaces directly (no silent fallback to a different Gemini model). |
 | `openai_model` | OpenAI model name. Defaults to `gpt-4o`; common overrides include `gpt-5`, `gpt-4o-mini`, `o4-mini`. |
 | `claude_model` | Anthropic model name. Defaults to `claude-sonnet-4-6`. Override to `claude-opus-4-5` for harder reasoning or `claude-haiku-4-5` for faster, cheaper calls. |
 | `claude_max_tokens` | Required by the Anthropic API. Default 2048 is plenty for date allocation. |
+| `grok_model` | xAI model name. Defaults to `grok-4`. SuperGrok-Heavy users can override to `grok-4.3` once it leaves beta. |
+| `mistral_model` | Mistral model name. Defaults to `mistral-large-latest` (Mistral Large 3). Override to `mistral-small-latest` for cheaper calls. |
 | `deepseek_model_flash` / `_pro` | DeepSeek "fast" and "smart" tiers. The app picks pro for inputs above `deepseek_pro_threshold`. |
 | `deepseek_pro_threshold` | Number of unresolved tasks above which DeepSeek auto-uses pro instead of flash. Default 5. |
 | `kimi_model` | Moonshot context-length tier: `moonshot-v1-8k` / `-32k` / `-128k`. Default 32k. |
+| `qwen_model` | Alibaba Qwen model. Defaults to `qwen-plus` (balanced). Override to `qwen3-max` (flagship) or `qwen3.5-flash` (cheapest). |
+| `qwen_endpoint` | DashScope OpenAI-compatible endpoint. Mainland China by default; international users can swap to `dashscope-intl.aliyuncs.com` (Singapore) or `dashscope-us.aliyuncs.com`. |
+| `glm_model` | Zhipu GLM model. Defaults to `glm-4.6`. Override to `glm-5` / `glm-5.1` once your account has access. |
+| `openrouter_model` | OpenRouter model id. Defaults to `openrouter/auto` (the router picks for each prompt). Override to a specific id like `anthropic/claude-opus-4-7` or `meta-llama/llama-4-maverick`. |
 | `<provider>_endpoint` | Base URL for the OpenAI-compatible / Anthropic API. Override only if routing through a corporate gateway or self-hosted endpoint. |
 | `hotkey` | Global hotkey to open the input window (uses [keyboard](https://github.com/boppreh/keyboard) syntax). |
 | `db_path` | Full path to DesktopCal's `calendar.db`. Defaults to `%APPDATA%\CalendarTask\Db\calendar.db` and can stay as-is unless DesktopCal is installed in a non-standard location. |
@@ -510,7 +536,7 @@ User Input
 | `time_parser.py` | Time-of-day extraction (24h, 12h+AM/PM, 中文 with periods, ranges) |
 | `recurring.py` | Weekly/monthly rule parsing + 12-week pre-expansion + startup top-up |
 | `ai_client.py` | Cross-provider orchestration: provider override, auto-fallback, prompt building |
-| `providers/` | `LLMProvider` ABC + `GeminiProvider` + `DeepSeekProvider` + factory |
+| `providers/` | `LLMProvider` ABC + `OpenAICompatibleProvider` base + 10 concrete providers (Gemini / OpenAI / Claude / Grok / Mistral / DeepSeek / Kimi / Qwen / GLM / OpenRouter) + factory |
 | `calendar_db.py` | SQLite reads/writes against DesktopCal's schema; LIKE-escape, lock retries |
 | `last_op.py` | Records the most recent batch for one-deep undo |
 | `templates.py` | 5 built-in templates + user-defined; tray submenu |
@@ -582,5 +608,5 @@ CalendarTaskAI is an **unofficial** plugin for DesktopCal; it is not affiliated 
 
 Built on:
 - [DesktopCal](https://www.desktopcal.com/), the calendar app this plugin writes to.
-- The five LLM providers it supports: Google Gemini, OpenAI, Anthropic Claude, DeepSeek, and Moonshot Kimi.
+- The ten LLM providers it supports: Google Gemini, OpenAI, Anthropic Claude, xAI Grok, Mistral AI, DeepSeek, Moonshot Kimi, Alibaba Qwen, Zhipu GLM, and OpenRouter.
 - Open-source dependencies that do the heavy lifting: pystray, Pillow, keyboard, click, google-genai, PyInstaller.
