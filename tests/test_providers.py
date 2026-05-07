@@ -4,6 +4,10 @@ These cover only pure logic (factory, tier selection, NotConfigured guards).
 End-to-end calls against real APIs are out of scope until we wire up CI with
 recorded HTTP fixtures.
 """
+import io
+import json
+from unittest.mock import patch
+
 import pytest
 
 from providers import LLMProvider, NotConfigured, get_provider, list_providers
@@ -225,6 +229,66 @@ class TestOpenAICompatibleConfig:
     def test_new_provider_model_override(self, klass, model_field, override):
         p = klass({model_field: override})
         assert p.model == override
+
+
+class TestOpenAICompatibleWireFormat:
+    """Mock urlopen to verify each new provider hits /chat/completions
+    with the expected Authorization header and model payload. Catches
+    regressions in the shared base class that schema-only tests miss."""
+
+    @pytest.mark.parametrize("klass, key_field, expected_url", [
+        (GrokProvider, "grok_api_key", "https://api.x.ai/v1/chat/completions"),
+        (MistralProvider, "mistral_api_key",
+            "https://api.mistral.ai/v1/chat/completions"),
+        (QwenProvider, "qwen_api_key",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"),
+        (GLMProvider, "glm_api_key",
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions"),
+        (OpenRouterProvider, "openrouter_api_key",
+            "https://openrouter.ai/api/v1/chat/completions"),
+    ])
+    def test_provider_invokes_openai_chat_completions(
+        self, klass, key_field, expected_url
+    ):
+        # Fake an OpenAI-shaped success response: response.choices[0].message
+        # .content holds JSON the parser can consume.
+        fake_payload = {
+            "choices": [{"message": {"content": '[{"date": "2026-05-07", "task": "x"}]'}}]
+        }
+
+        captured = {}
+
+        class _FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def read(self):
+                return json.dumps(fake_payload).encode("utf-8")
+
+        def _fake_urlopen(req, timeout=None):
+            # Stash for assertions; the Request object carries url + headers.
+            captured["url"] = req.full_url
+            captured["headers"] = dict(req.header_items())
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            return _FakeResp()
+
+        p = klass({key_field: "sk-test"})
+        with patch("urllib.request.urlopen", _fake_urlopen):
+            result = p.analyze("sys", "msg")
+
+        # Wire format invariants the base class promises, asserted here
+        # so a refactor of `_call` that breaks any one of them fails loud:
+        assert captured["url"] == expected_url
+        # urllib normalizes header names to title-case (e.g. "Authorization").
+        auth = captured["headers"].get("Authorization", "")
+        assert auth == "Bearer sk-test"
+        assert captured["body"]["messages"][0]["role"] == "system"
+        assert captured["body"]["messages"][1]["role"] == "user"
+        # And the parser produced our fake row.
+        assert result == [{"date": "2026-05-07", "task": "x"}]
 
 
 # ---------------------------------------------------------------------------
