@@ -1,157 +1,256 @@
 # CalendarTaskAI
 
-**AI-Powered Task Scheduling for DesktopCal** (unofficial plugin)
+[![v1.0.0 released](https://img.shields.io/badge/v1.0.0-released-brightgreen?logo=github)](https://github.com/chrisye96/CalendarTaskAI/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey?logo=windows)](https://www.microsoft.com/windows)
+[![Build status](https://img.shields.io/github/actions/workflow/status/chrisye96/CalendarTaskAI/release.yml?label=build&logo=githubactions)](https://github.com/chrisye96/CalendarTaskAI/actions/workflows/release.yml)
 
-CalendarTaskAI is an intelligent task scheduling assistant that integrates with [DesktopCal](https://www.desktopcal.com/) (a popular desktop calendar application). It uses a **deterministic-first approach**: explicit dates are parsed using regex and rules (no AI needed), while tasks without dates are intelligently scheduled by an LLM based on your profile, habits, and existing workload.
+> **AI-powered task scheduling for [DesktopCal](https://www.desktopcal.com/).**
+> Type tasks naturally in Chinese or English; explicit dates and times are pinned by a deterministic regex parser, anything ambiguous is scheduled by an LLM that knows your calendar load and habits. Unofficial plugin, BYOK (bring your own API key).
 
-> **BYOK (Bring Your Own Key).** CalendarTaskAI does not ship with any API access. You configure your own Gemini or DeepSeek key on first launch; the key is stored only on your machine in `%APPDATA%\CalendarTaskAI\data\config.json`.
+```
+┌──────────────────────────────────────────────┐
+│  Press Ctrl+Alt+Space anywhere               │
+│  ┌────────────────────────────────────────┐  │
+│  │ 明天9点开会                            │  │
+│  │ 完成项目报告                           │  │
+│  │ 每周一健身房                           │  │
+│  └────────────────────────────────────────┘  │
+│              [Submit]                        │
+└──────────────────────────────────────────────┘
+                    ↓
+   AI Allocation:
+   2026-05-07   [09:00] 开会
+   2026-05-08   完成项目报告
+   2026-05-11   健身房   ← 12 weeks expanded
+   2026-05-18   健身房
+   ...
+                    ↓
+            DesktopCal updated
+```
+
+---
+
+## Quick Start
+
+### A. Windows users (no Python required)
+
+1. Download `CalendarTaskAI-v1.0.0.zip` from the [latest release](https://github.com/chrisye96/CalendarTaskAI/releases/latest).
+2. Extract anywhere (e.g. `C:\Apps\CalendarTaskAI`).
+3. Double-click `CalendarTaskAI.exe`. The setup wizard opens; pick a provider, paste your API key, click **Test**, then **Save**.
+4. Press `Ctrl+Alt+Space` to start typing tasks. The tray icon (CT on baby blue) sits in the system tray; right-click for the full menu.
+
+> Windows SmartScreen may warn on first launch (the bundle is unsigned). Click **More info** then **Run anyway**.
+
+### B. Python developers
+
+```powershell
+git clone https://github.com/chrisye96/CalendarTaskAI.git
+cd CalendarTaskAI
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+pythonw main.py        # GUI mode (no console window)
+# or:  python main.py today        # CLI mode
+```
+
+You need a Gemini key from [Google AI Studio](https://aistudio.google.com/apikey) (free tier) or a DeepSeek key from [platform.deepseek.com](https://platform.deepseek.com/api_keys).
+
+---
+
+## What is CalendarTaskAI?
+
+[DesktopCal](https://www.desktopcal.com/) is a beloved free Windows calendar that draws straight onto the desktop wallpaper. Adding tasks to it means clicking a date, opening a tiny inline editor, and typing. Fine for one task. Painful for the way most people actually plan: dump a list, expect the calendar to figure out where things go.
+
+CalendarTaskAI sits beside DesktopCal and writes directly into its SQLite database. It accepts free-form input and applies two layers of understanding:
+
+1. **A deterministic parser** handles every date and time format it recognizes (12 Chinese variants, 8 English ones, plus times in five formats and ranges). These tasks bypass the LLM entirely: instant, free, and offline.
+2. **A pluggable LLM backend** picks dates only for tasks that don't carry an explicit hint. The prompt sees your profile (work hours, scheduling rules), current task load, recent interaction history, and your satisfaction ratings.
+
+The result: 70-90% of typical input is resolved without any API call. The leftover 10-30% goes to whichever LLM you've configured (Gemini default; DeepSeek opt-in with auto-fallback when Gemini fails).
 
 ---
 
 ## Features
 
-- **System Tray Integration** - Runs quietly in your system tray with a global hotkey (`Ctrl+Alt+Space`) for quick task entry
-- **Macaron Light + Dark Theme** - Pastel-blue light theme (default) and a coherent dark variant that keeps the brand identity through desaturation rather than simple inversion. Switch via tray menu Theme ▶ Light / Dark / Follow System.
-- **AI-Powered Task Analysis** - Pluggable LLM backend (Gemini today, DeepSeek next) for intelligent task scheduling when dates aren't explicitly specified
-- **Deterministic Date Parsing** - Regex-based parsing for explicit dates (today, tomorrow, 3月25日, next Monday, etc.) - no LLM call needed
-- **Smart Learning System** - Learns from your behavior: tracks accepted/rejected suggestions, task modifications, and satisfaction ratings
-- **Offline Cache with Auto-Retry** - Failed API requests are saved locally and automatically retried on next startup
-- **Full CLI Interface** - Complete command-line interface for all operations
-- **Auto-Start on Boot** - Optional Windows startup integration
+**Input**
+- Free-form natural-language task entry, Chinese and English mixed
+- Multi-task input via newline, `;`/`；`, or Chinese enumeration comma `、`
+- Explicit dates: `今天`, `明天`, `下周一`, `3月25日`, `2026-12-01`, `next monday`, `in 3 days`, ...
+- Explicit times: `9点`, `9点半`, `下午3-5点`, `9:00-10:30`, `9am`, ...
+- Recurring patterns: `每周一健身房`, `每月15号交房租`, `every monday standup`
+
+**Scheduling**
+- Deterministic-first: regex resolves explicit hints, LLM handles only the rest
+- Two LLM providers with cross-provider auto-fallback: Gemini → DeepSeek-flash on failure
+- Manual escalation buttons in the confirm view: **Re-run with DeepSeek-flash** / **Re-run with DeepSeek Pro**
+- Profile-aware prompting: scheduling rules in `profile.md` are honored by the LLM
+- Behavioral learning: every accepted / rejected / moved task feeds back into future prompts
+
+**Workflow**
+- Global hotkey (default `Ctrl+Alt+Space`) opens the floating input window
+- Tray icon menu: Add Task, Templates submenu, Today, Undo last add, Retry pending, Calendar refresh, Theme, Auto-start
+- 5 built-in templates (Standup / 周报 / Sprint planning / 健身计划 / 读书清单), plus user-defined entries in `data/templates.json`
+- One-click undo of the last batch added (CLI parity: `python main.py undo`)
+- Offline cache: failed API requests retry automatically at next startup
+
+**Distribution**
+- Two Windows executables in one zip: `CalendarTaskAI.exe` (silent, tray + hotkey) and `CalendarTaskAI-cli.exe` (CLI with console)
+- Or run from source on Python 3.10+
+- JSON backup / restore covering config (keys redacted), profile, history, recurring rules, templates, and ±1 year of tasks
+
+**Polish**
+- Light + Dark theme, switchable via tray menu (Light / Dark / Follow System)
+- All action buttons pass WCAG AA contrast in both themes
+- Hi-DPI aware (sharp on 4K laptops)
+- Logs to `%APPDATA%\CalendarTaskAI\logs\app.log` (rotating, 1 MB × 5)
 
 ---
 
-## Prerequisites
+## Installation
 
-- **Python 3.10+** (3.12 recommended)
-- **Windows OS** (uses Windows-specific features like registry for auto-start)
-- **DesktopCal** installed (with its SQLite database)
-- **An LLM API key** of your own:
-  - [Google Gemini](https://aistudio.google.com/apikey) (free tier available)
-  - or [DeepSeek](https://platform.deepseek.com/api_keys)
+### Option A: Pre-built Windows executable
 
----
+Recommended for non-developers.
 
-## Download (no Python required)
+1. Visit [Releases](https://github.com/chrisye96/CalendarTaskAI/releases) and download `CalendarTaskAI-vX.Y.Z.zip` (~25 MB).
+2. Extract to a folder you control (e.g. `C:\Apps\CalendarTaskAI`).
+3. Inside, you'll find:
+   - `CalendarTaskAI.exe`: GUI launcher (no console window). This is what you run for daily use.
+   - `CalendarTaskAI-cli.exe`: CLI variant with a console. Use this for `today`, `add`, `next`, `backup`, etc.
+4. (Optional) Pin `CalendarTaskAI.exe` to taskbar / send to Start menu, or enable auto-start via the tray menu.
 
-> The repository is currently private. The download and clone links below activate after the v1.0.0 launch.
+### Option B: From source
 
-Pre-built Windows binaries are attached to every [GitHub Release](https://github.com/chrisye96/CalendarTaskAI/releases):
+For Python 3.10+ on Windows.
 
-1. Download `CalendarTaskAI-vX.Y.Z.zip` from the latest release.
-2. Extract to a folder of your choice (e.g. `C:\Apps\CalendarTaskAI`).
-3. Double-click `CalendarTaskAI.exe` for the GUI (tray + hotkey).
-4. Use `CalendarTaskAI-cli.exe today` (or any other CLI command) from a command prompt.
+```powershell
+git clone https://github.com/chrisye96/CalendarTaskAI.git
+cd CalendarTaskAI
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-The bundle is unsigned, so Windows SmartScreen may warn on first launch — click "More info" → "Run anyway". This will be resolved when we add code signing in a future release.
+Then run:
 
-## Installation from source (Python developers)
+| Mode | Command |
+|------|---------|
+| GUI (no console) | `pythonw main.py` |
+| GUI (with console for debugging) | `python main.py` |
+| CLI | `python main.py <command>` (see [CLI mode](#cli-mode)) |
 
-1. **Clone the repository:**
-   ```powershell
-   git clone https://github.com/chrisye96/CalendarTaskAI.git
-   cd CalendarTaskAI
-   ```
-
-2. **Create a virtual environment (recommended):**
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-   Required packages:
-   - `google-genai` - Gemini AI SDK (new unified SDK, replaces deprecated `google-generativeai`)
-   - `pystray` - System tray icon
-   - `Pillow` - Image processing for tray icon
-   - `keyboard` - Global hotkey support
-   - `click` - CLI framework
-
-4. **Run:**
-   ```powershell
-   pythonw main.py        # GUI (no console)
-   python main.py today   # CLI command
-   ```
-
-## Building your own Windows executable
+### Option C: Build your own executable
 
 ```powershell
 pip install -r requirements-dev.txt
 python build_release.py
-# Output: dist/CalendarTaskAI/  (the bundle) + dist/CalendarTaskAI-vX.Y.Z.zip
 ```
 
-The build runs the `pytest` suite first; a failing test fails the build.
-
-Pushing a `v*` git tag (e.g. `git tag v1.0.0 && git push --tags`) triggers the same build via GitHub Actions and creates a draft release with the artifact attached.
+Produces `dist/CalendarTaskAI-vX.Y.Z.zip` after running the test suite. Or push a `v[0-9]*` tag to GitHub to trigger the release workflow which does the same on a clean Windows runner and attaches the zip to a GitHub Release as a draft.
 
 ---
 
-## LLM Providers
+## First-Run Setup
 
-CalendarTaskAI is provider-agnostic. The active backend is chosen by the `llm_provider` field in `config.json`. New providers plug in by subclassing `providers.LLMProvider`.
+### GUI
 
-### Routing model
+The first launch shows a Tkinter wizard:
 
-For new users, **Gemini is the default**. DeepSeek is opt-in: configure `deepseek_api_key` and you unlock both an automatic fallback and two manual escape hatches.
-
-```
-                   ┌───────────────┐
-   user submits ─► │    Gemini     │ ── success ──► confirm view
-                   └───────┬───────┘
-                           │ on error (network, 4xx, 5xx, timeout)
-                           │ AND DeepSeek configured
-                           ▼
-                   ┌───────────────┐
-                   │ DeepSeek-flash│ ── auto fallback (no user action)
-                   └───────────────┘
-
-   confirm view buttons (visible when DeepSeek is configured):
-     [Re-run · DeepSeek flash]   alternative model, same tier
-     [Re-run · DeepSeek Pro]     escalate to the smarter tier for complex inputs
-```
-
-Properties:
-- **Pro is never automatic.** It only runs when the user clicks the Pro button, so there are no surprise charges.
-- **Manual buttons disable the auto-fallback.** When you explicitly pick a provider via the buttons, errors surface directly so you can react. Auto-fallback only applies to the default Gemini path.
-- **Default-DeepSeek users** still see both buttons in the confirm view (re-run flash for a fresh attempt, Pro to escalate).
-
-| Provider | Default model | Auto-fallback target | Tiered? |
-|----------|--------------|---------------------|---------|
-| `gemini` | `gemini-3.1-flash-lite-preview` | DeepSeek-flash (when configured) | No |
-| `deepseek` | `deepseek-v4-flash` for ≤ `deepseek_pro_threshold` tasks (default 5), `deepseek-v4-pro` above | None | Yes (manual via Pro button) |
-
-## Configuration
-
-### First-Time Setup (GUI)
-
-The first time you run `python main.py` (GUI mode), a Tkinter setup wizard opens:
-
-1. Pick a provider — Gemini (free tier) or DeepSeek.
-2. Click "Get a {provider} API key →" to open the provider's key page in your browser.
+1. **Pick a provider**: Gemini (free tier) or DeepSeek.
+2. Click the "Get a {provider} API key" link to open the provider's key page in your browser.
 3. Paste the key into the masked field.
-4. (Recommended) Click **Test** to verify the key works. The wizard makes a tiny live call and reports ✓ or an error.
-5. Click **Save**.
+4. (Recommended) Click **Test** to make a tiny live API call and confirm the key works.
+5. **Save**.
 
-Your key is saved to `%APPDATA%\CalendarTaskAI\data\config.json` and never leaves your machine. To change it later, click `Config` in the tray menu (or edit the JSON directly).
+The key is stored only on your machine, in `%APPDATA%\CalendarTaskAI\data\config.json`. To change it later, edit that file directly or open it via tray menu **Config**.
 
-### CLI Setup
-
-If you prefer the terminal, run:
+### CLI
 
 ```powershell
 python main.py config setup
 ```
 
-This walks through the same fields with prompts. Press Enter to skip a field, or type `q` to save and exit.
+Walks through the same fields with prompts. Press Enter to keep the current value, type `q` to save and exit.
 
-### Manual Configuration
+---
 
-Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
+## Daily Use
+
+### GUI mode
+
+1. Press `Ctrl+Alt+Space` (or right-click tray → **Add Task**).
+2. Type your tasks in the floating window. Multiple tasks per line work; separate with `;`/`；`/`、` or use newlines.
+3. Press `Ctrl+Enter` (or click **Submit**).
+4. The AI analyzes the input, then shows the proposed allocation with each task's date.
+5. Click **Confirm** to write to DesktopCal, **Edit** to revise the input, or **Cancel** to discard.
+6. (When DeepSeek is configured) The confirm view shows two extra buttons: **Re-run with DeepSeek-flash** for an alternative attempt, **Re-run with DeepSeek Pro** for genuinely complex inputs.
+
+DesktopCal needs to be told to reload (its in-memory view doesn't auto-refresh). Either:
+- Switch to another month and back, or restart DesktopCal manually, or
+- Set `auto_restart_desktopcal: true` in `config.json` (off by default; warning: force-kills DesktopCal which loses unsaved state in its other panels).
+
+### CLI mode
+
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `add [TEXT]` | Add tasks via AI (or stdin if no TEXT) | `python main.py add "明天买菜"` |
+| `today` | Show today's tasks | `python main.py today` |
+| `next [N]` | Show tasks for the next N days (default 7) | `python main.py next 14` |
+| `list [DATE]` | Show tasks for a date or range | `python main.py list 2026-03-25` |
+| `done KEYWORD` | Mark matching tasks done | `python main.py done "买菜"` |
+| `undone KEYWORD` | Unmark done | `python main.py undone "报告"` |
+| `delete KEYWORD` | Delete matching tasks | `python main.py delete "取消的任务"` |
+| `move KEYWORD DATE` | Move matching tasks to DATE | `python main.py move "会议" 2026-04-01` |
+| `search KEYWORD` | Find tasks across all dates | `python main.py search "复盘"` |
+| `undo` | Reverse the last batch added | `python main.py undo` |
+| `backup [--out FILE]` | Export full state to JSON | `python main.py backup --out my-backup.json` |
+| `restore FILE` | Restore from a backup JSON | `python main.py restore my-backup.json` |
+| `export [--format md\|txt]` | Print tasks for a date range | `python main.py export --start 2026-03-01 --end 2026-03-31` |
+| `retry` | Retry pending failed AI requests | `python main.py retry` |
+| `refresh` | Print instructions for reloading DesktopCal's display | `python main.py refresh` |
+| `profile [view\|edit\|reset]` | Manage the personal profile | `python main.py profile edit` |
+| `config [show\|set\|setup]` | Manage configuration | `python main.py config show` |
+
+---
+
+## Tray Menu
+
+Right-click the tray icon (a 64×64 square with "CT" on macaron baby blue) for:
+
+- **Add Task**: opens the input window (default action; left-click also works)
+- **Add from template ▶**: submenu of saved templates; pick one to pre-fill the input window
+- **Today's Tasks**: message box listing today's pending tasks
+- **Undo last add**: reverses the most recent batch (greyed when there's nothing to undo)
+- **Retry Pending**: retry any failed AI requests sitting in the offline cache
+- **Config**: opens `config.json` in the system editor
+- **Profile**: opens `profile.md` in the system editor
+- **Theme ▶**: Light / Dark / Follow System (radio menu)
+- **Auto Start**: toggle the Windows registry entry that launches CalendarTaskAI on login
+- **Quit**
+
+---
+
+## Configuration
+
+All runtime data lives under `%APPDATA%\CalendarTaskAI\`:
+
+```
+%APPDATA%\CalendarTaskAI\
+├─ data\
+│   ├─ config.json       (provider keys, hotkey, theme, etc.)
+│   ├─ profile.md        (your work habits + scheduling rules)
+│   ├─ history.json      (interaction log + behavioral analysis)
+│   ├─ pending.json      (failed AI requests waiting for retry)
+│   ├─ recurring.json    (registered recurring rules)
+│   ├─ templates.json    (5 built-ins seeded on first launch + user adds)
+│   └─ last_op.json      (most recent batch, for Undo)
+└─ logs\
+    └─ app.log           (rotating, 1 MB × 5)
+```
+
+### `config.json` reference
 
 ```json
 {
@@ -162,8 +261,9 @@ Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
   "deepseek_model_flash": "deepseek-v4-flash",
   "deepseek_model_pro": "deepseek-v4-pro",
   "deepseek_endpoint": "https://api.deepseek.com/v1",
+  "deepseek_pro_threshold": 5,
   "hotkey": "ctrl+alt+space",
-  "db_path": "",
+  "db_path": "%APPDATA%\\CalendarTask\\Db\\calendar.db",
   "auto_start": false,
   "retry_on_startup": true,
   "auto_restart_desktopcal": false,
@@ -173,64 +273,109 @@ Edit `%APPDATA%\CalendarTaskAI\data\config.json` directly:
 }
 ```
 
-> **Note:** Leave `db_path` empty for auto-detection (`%APPDATA%\CalendarTask\Db\calendar.db`), or specify a custom path.
-
 | Field | Description |
 |-------|-------------|
-| `llm_provider` | `"gemini"` or `"deepseek"` |
-| `gemini_api_key` / `deepseek_api_key` | API key for the chosen provider (BYOK) |
-| `gemini_model` | Gemini model name. If the model doesn't exist, the error surfaces directly — no silent fallback (deliberate, so misconfigurations are visible) |
-| `deepseek_model_flash` / `_pro` | DeepSeek "fast" and "smart" tiers; the app uses pro for inputs above `deepseek_pro_threshold` unresolved tasks |
-| `hotkey` | Global hotkey to open the task input window |
-| `db_path` | Full path to DesktopCal's SQLite database file (empty = auto-detect) |
-| `auto_start` | Start CalendarTaskAI when Windows boots |
-| `retry_on_startup` | Retry failed requests automatically on startup |
-| `auto_restart_desktopcal` | **Off by default.** When on, CalendarTaskAI force-kills and restarts DesktopCal after writing tasks. Convenient but may discard unsaved state in DesktopCal's other panels. |
-| `request_timeout_sec` | Per-call LLM API timeout in seconds (default 30) |
-| `rating_interval` | Prompt for satisfaction rating every N operations |
-| `theme` | `"light"` / `"dark"` / `"system"`. `system` follows Windows's app theme via `AppsUseLightTheme`. Switch via tray menu. |
-
-### View Current Configuration
-
-```powershell
-python main.py config show
-```
+| `llm_provider` | `"gemini"` or `"deepseek"`. Default Gemini. |
+| `gemini_api_key` / `deepseek_api_key` | API key for the chosen provider. BYOK; never sent off your machine except to the provider. |
+| `gemini_model` | Exact Gemini model name. 404 surfaces directly (no silent fallback to a different Gemini model). |
+| `deepseek_model_flash` / `_pro` | DeepSeek "fast" and "smart" tiers. The app picks pro for inputs above `deepseek_pro_threshold`. |
+| `deepseek_pro_threshold` | Number of unresolved tasks above which DeepSeek auto-uses pro instead of flash. Default 5. |
+| `hotkey` | Global hotkey to open the input window (uses [keyboard](https://github.com/boppreh/keyboard) syntax). |
+| `db_path` | Full path to DesktopCal's `calendar.db`. Defaults to `%APPDATA%\CalendarTask\Db\calendar.db` and can stay as-is unless DesktopCal is installed in a non-standard location. |
+| `auto_start` | Run on Windows login. Toggleable via tray menu. |
+| `retry_on_startup` | Retry failed AI requests automatically at every launch. |
+| `auto_restart_desktopcal` | **Off by default.** When on, force-kills + relaunches DesktopCal after writing tasks (refreshes its view automatically but may discard unsaved state in its other panels). |
+| `request_timeout_sec` | Per-call LLM API timeout. |
+| `rating_interval` | Prompt for satisfaction rating every N operations. |
+| `theme` | `"light"` / `"dark"` / `"system"`. `"system"` follows the Windows app theme. |
 
 ---
 
-## Personal Profile Setup
+## Input Reference
 
-The profile (`data/profile.md`) helps the AI understand your work habits, preferences, and scheduling rules for better task allocation.
+### Date hints
 
-### Edit Profile
+| You type | Resolves to |
+|----------|-------------|
+| `今天` `今日` `今晚` | Today |
+| `明天` `明日` | Tomorrow |
+| `后天` `大后天` | Day after tomorrow / 3 days from now |
+| `下周` | Next Monday |
+| `下周一` ~ `下周日` | Next week's Mon/Tue/.../Sun |
+| `这周三` `这周末` | This Wednesday / This Saturday |
+| `周一` ~ `周日`, `星期一` ~ `星期天`, `礼拜一` ~ `礼拜天` | Next occurrence of that weekday |
+| `下个月` `这个月` `月初` `月底` | First of next month / first of this month / first or last |
+| `3天后` `三天后` `2周后` `1个月后` | Relative offsets (Arabic or Chinese numerals) |
+| `2026年3月25日` `2026-03-25` `2026.03.25` `2026/03/25` | Full ISO/Chinese dates |
+| `3月25日` `3月25` `0325` `3.25` `3/25` `3-25` | Short dates (year inferred; past dates roll to next year) |
+| `today` `tonight` `tomorrow` `next week` `next monday` | English equivalents |
+| `in 3 days` `in 2 weeks` `end of month` | English relative |
 
-```powershell
-python main.py profile edit
-```
+### Time hints
 
-This opens the profile in your default text editor.
+Time prefixes attach to the task text as `[HH:MM]` or `[HH:MM-HH:MM]`. The deterministic parser owns these (the LLM is forbidden from inventing them, to avoid format drift).
 
-### Profile Structure
+| You type | Becomes |
+|----------|---------|
+| `9点开会` | `[09:00] 开会` |
+| `9点半开会` | `[09:30] 开会` |
+| `9点45分会议` | `[09:45] 会议` |
+| `上午9点开会` `下午3点开会` `晚上9点睡觉` `凌晨2点起床` `中午12点吃饭` | Period-aware 24-hour conversion |
+| `9-10点 开会` `下午3-5点 讨论` | Chinese ranges |
+| `9:00 daily standup` `3pm meeting` `9:00-10:30 review` `9-11am sprint` | Western ranges, AM/PM |
+
+Combinable: `明天9点开会` resolves to date=tomorrow, task=`[09:00] 开会`.
+
+### Recurring patterns
+
+| You type | What gets scheduled |
+|----------|---------------------|
+| `每周一 健身房` | "健身房" every Monday for the next 12 weeks |
+| `每周一三五 健身` | every Mon / Wed / Fri |
+| `每周一、三、五 健身` | comma-separated equivalent |
+| `每周三 上午10-11点 团队会议` | `[10:00-11:00] 团队会议` every Wednesday |
+| `每月15号 交房租` | "交房租" on the 15th of every month |
+| `每月1日 报销` | "报销" on the 1st |
+| `every monday 9am standup` | `[09:00] standup` every Monday |
+| `every fri team review` | "team review" every Friday |
+
+Properties:
+- **Pre-expanded ~12 weeks ahead.** New instances appear in the confirm view; you can cancel the whole batch.
+- **Rules saved on confirm only.** Cancelled inputs leave no trace in `recurring.json`.
+- **Top-up at startup.** Each launch refills the rolling 12-week window. Idempotent on a given day.
+- **Out of scope:** biweekly, day-of-month ranges, "every other Tuesday", full cron. Open an issue if you'd actually use any of these.
+
+### Separator behavior
+
+| Separator | Splits? |
+|-----------|---------|
+| Newline | Yes |
+| `;` `；` (English / Chinese semicolon) | Yes |
+| `、` (Chinese enumeration comma) | Yes |
+| `,` `，` (regular comma) | **No** (would mangle prose like "买菜, 然后洗衣服") |
+| Space | **No** (would split phrases like "完成项目报告") |
+
+---
+
+## Personal Profile
+
+The profile lives at `%APPDATA%\CalendarTaskAI\data\profile.md` and is fed into every LLM prompt. A template is generated on first launch:
 
 ```markdown
 # Personal Profile
 
 ## Career
-- Role: Software Developer
-- Industry: Technology
-- Current projects: CalendarTaskAI, Web App
+- Role: 
+- Industry: 
+- Current projects: 
 
 ## Skills
-- Primary skills: Python, JavaScript
-- Learning: Machine Learning
+- Primary skills: 
+- Learning: 
 
 ## Work Habits
-- Preferred working hours: 9 AM - 6 PM
-- Most productive time: Morning
-- Break preferences: Pomodoro technique
-
-## Interests & Hobbies
-- Reading, Gaming
+- Preferred working hours: 
+- Most productive time: 
 
 ## Scheduling Rules
 <!-- The AI will follow these rules when assigning dates -->
@@ -245,536 +390,176 @@ This opens the profile in your default text editor.
 - Preferred task granularity: detailed steps
 ```
 
-### Scheduling Rules Section
-
-The **Scheduling Rules** section is particularly important. Define your personal rules here, and the AI will follow them when deciding which dates to assign tasks:
-
-- `No work tasks on weekends` - AI will only schedule work tasks Mon-Fri
-- `Max 3 tasks per workday` - AI will spread tasks if a day is overloaded
-- `Programming tasks in the morning` - AI considers task type when scheduling
-- `Exercise on Mon/Wed/Fri` - AI will schedule exercise-related tasks on these days
+The **Scheduling Rules** section is the most directly impactful: each bullet is treated as a hard constraint by the LLM when picking dates for unresolved tasks. Edit via tray menu **Profile** or `python main.py profile edit`.
 
 ---
 
-## How to Start
+## Theming
 
-### GUI Mode (Recommended)
+Two palettes ship: a macaron baby-blue light theme and a desaturated-blue dark variant.
 
-Start with the system tray icon and global hotkey:
-```powershell
-python main.py
-```
+- **Light**: pastel surface, baby-blue accent, dark navy primary text.
+- **Dark**: blue-tinted slate surface, desaturated baby-blue accent, off-white primary text. Action buttons use dark text on the lighter accent for WCAG AA contrast (white-on-baby-blue would fail AA).
 
-To run without a console window (silent mode):
-```powershell
-pythonw main.py
-```
-> **Tip:** Use `pythonw` for a cleaner experience - the app runs entirely from the system tray without showing a console window.
+Switch via tray menu **Theme ▶ Light / Dark / Follow System**. The "Follow System" option reads the Windows registry value `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`.
 
-On startup:
-1. Configuration is validated (setup wizard runs if not configured)
-2. Pending failed requests are automatically retried (if enabled)
-3. System tray icon appears
-4. Global hotkey is registered
-
-### CLI Mode
-
-Run specific commands directly:
-```powershell
-python main.py <command> [options]
-```
-
-> **Note:** CLI commands can be used from a separate terminal window while the GUI is running. This allows you to quickly query tasks (`python main.py today`) or add tasks via command line without interrupting the GUI.
+Switching takes effect on the next time you open the input window or wizard. If a window is currently visible during the switch, it's left alone (so your work isn't yanked) and rebuilds with the new palette on next open.
 
 ---
 
-## Usage Guide
-
-### GUI Mode
-
-1. **Open Task Input Window**
-   - Press `Ctrl+Alt+Space` (or your configured hotkey)
-   - Or right-click tray icon → "Add Task"
-
-2. **Enter Tasks**
-   - Type your tasks in the text area
-   - One task per line, or use separators (see Task Input Format)
-   - **Buttons available:**
-     - **Clear** - Clear the input text
-     - **Paste** - Paste from clipboard
-   - Press `Ctrl+Enter` or click "Submit"
-
-3. **Review AI Allocation**
-   - The AI analyzes your input and proposes dates
-   - Review the allocation table
-   - **Buttons available:**
-     - **Edit** - Go back to edit your input
-     - **Copy** - Copy the allocation result to clipboard
-   - Click "Confirm" to write to calendar, or "Cancel" to discard
-
-4. **Rating (Optional)**
-   - Every 10 operations, you'll be asked to rate satisfaction (1-5 stars)
-   - This helps the AI learn your preferences
-
-### Tray Icon Menu
-
-The tray icon features a macaron blue background with dark "CT" text, matching the app's light theme.
-
-Right-click the tray icon for:
-- **Add Task** - Open input window
-- **Add from template ▶** - Pre-fill the input with one of the saved templates (5 ship out of the box: Standup, 周报, Sprint planning, 健身计划, 读书清单; edit `data/templates.json` to add your own)
-- **Today's Tasks** - View tasks for today
-- **Undo last add** - Reverses the most recent add (greyed out when there's nothing to undo)
-- **Retry Pending** - Manually retry failed requests
-- **Config** - Open config.json in editor
-- **Profile** - Open profile.md in editor
-- **Theme ▶** - Switch between Light, Dark, or Follow System (radio menu; checked option is the active one)
-- **Auto Start** - Toggle Windows startup
-- **Quit** - Exit the application
-
-### CLI Commands
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `add [TEXT]` | Add tasks using AI analysis | `python main.py add "买菜 明天"` |
-| `profile [ACTION]` | View, edit, or reset profile | `python main.py profile edit` |
-| `config [ACTION]` | View or modify configuration | `python main.py config show` |
-| `list [DATE]` | List tasks for a date/range | `python main.py list this-week` |
-| `today` | Show today's tasks | `python main.py today` |
-| `next [N]` | Show tasks for the next N days (default 7) | `python main.py next 14` |
-| `done KEYWORD` | Mark matching tasks as done | `python main.py done "买菜"` |
-| `undone KEYWORD` | Mark matching tasks as undone | `python main.py undone "买菜"` |
-| `delete KEYWORD` | Delete matching tasks | `python main.py delete "旧任务"` |
-| `move KEYWORD DATE` | Move tasks to new date | `python main.py move "会议" 2026-03-25` |
-| `search KEYWORD` | Search tasks by keyword | `python main.py search "报告"` |
-| `undo` | Reverse the most recent batch of tasks added | `python main.py undo` |
-| `backup [--out FILE]` | Export config (keys redacted), profile, history, templates, recurring rules, ±1 year of tasks | `python main.py backup --out my-backup.json` |
-| `restore PATH` | Restore from a backup JSON file | `python main.py restore my-backup.json` |
-| `export [OPTIONS]` | Export tasks to stdout | `python main.py export --format md` |
-| `refresh` | Show refresh instructions | `python main.py refresh` |
-| `retry` | Retry all pending requests | `python main.py retry` |
-
-### CLI Examples
+## Backup & Restore
 
 ```powershell
-# Add tasks interactively (prompts for input)
-python main.py add
-
-# Add tasks directly
-python main.py add "明天开会讨论项目进度"
-python main.py add "周五前完成报告; 下周一提交材料"
-
-# List tasks
-python main.py list today
-python main.py list tomorrow
-python main.py list this-week
-python main.py list this-month
-python main.py list 2026-03-25
-
-# Manage tasks
-python main.py done "报告"          # Mark as done
-python main.py undone "报告"        # Unmark as done
-python main.py move "会议" 2026-03-30  # Move to March 30
-python main.py delete "取消的任务"    # Delete task
-
-# Export tasks
-python main.py export --format md --start 2026-03-01 --end 2026-03-31 > march_tasks.md
-
-# Configuration
-python main.py config setup         # Interactive setup
-python main.py config show          # View current config
-python main.py config set hotkey "ctrl+shift+t"  # Change single setting
+python main.py backup --out my-backup.json
+python main.py restore my-backup.json
 ```
+
+A backup includes:
+- `config.json` (API keys are replaced with `*** REDACTED ***`)
+- `profile.md`
+- `history.json`
+- `templates.json`
+- `recurring.json`
+- ±1 year of tasks from the calendar database
+
+A restore overwrites `profile.md`, `history.json`, `templates.json`, and `recurring.json`. Tasks are **appended** to the database (duplicates may result if you restore on top of a populated DB). API keys are kept from your existing `config.json`; the backup never contains real keys, even when made with `--overwrite-config`.
 
 ---
 
-## Task Input Format
+## How DesktopCal Integration Works
 
-### Supported Separators
+CalendarTaskAI writes directly to DesktopCal's SQLite database at `%APPDATA%\CalendarTask\Db\calendar.db`.
 
-Tasks can be separated by:
-- **Newlines** - One task per line
-- **Semicolons** - `任务1; 任务2` or `任务1；任务2`
-- **Chinese enumeration comma** - `任务1、任务2、任务3`
+**Schema:**
+- Table: `item_table`
+- Key field: `it_unique_id` in the form `dkcal_mdays_YYYYMMDD` (e.g. `dkcal_mdays_20260325`)
+- Content field: `it_content`. Tasks for a day are stored as one string with `\r\n` separators. Done tasks are prefixed with `[+]`.
 
-> **Note:** Regular commas (`,`, `，`) and spaces are NOT used as separators to avoid accidentally splitting task descriptions.
-
-### Supported Date Formats
-
-**Chinese Relative Dates:**
-- `今天`, `今日`, `今晚` - Today
-- `明天`, `明日` - Tomorrow
-- `后天` - Day after tomorrow
-- `大后天` - 3 days from now
-- `下周`, `下周一` ~ `下周日` - Next week / Next Monday~Sunday
-- `这周一` ~ `这周日`, `这周末` - This week's Monday~Sunday, this weekend
-- `下个月` - Next month (1st day)
-- `这个月`, `月初` - This month
-- `月底` - End of month
-
-**Chinese Day of Week:**
-- `周一` ~ `周日`, `周天` - Monday ~ Sunday
-- `星期一` ~ `星期天` - Monday ~ Sunday
-- `礼拜一` ~ `礼拜天` - Monday ~ Sunday
-
-**Relative Expressions:**
-- `3天后`, `三天后` - In 3 days
-- `2周后`, `两周后` - In 2 weeks
-- `1个月后` - In 1 month
-
-**Short Dates (without year):**
-- `3月25日`, `3月25` - March 25
-- `0325` - March 25 (MMDD format)
-- `3.25`, `3/25`, `3-25` - March 25
-
-**Full Dates:**
-- `2026年3月25日` - March 25, 2026
-- `2026-03-25` - ISO format
-- `2026/03/25`, `2026.03.25` - Alternative formats
-
-**English Dates:**
-- `today`, `tonight` - Today
-- `tomorrow` - Tomorrow
-- `next week`, `next monday` ~ `next sunday` - Next week/day
-- `in 3 days`, `in 2 weeks` - Relative
-- `end of month` - End of month
-
-### Theming (Light / Dark)
-
-CalendarTaskAI ships with two color palettes:
-
-- **Light** (default): macaron baby blue accent, off-white surface
-- **Dark**: dark blue-slate surface with a desaturated baby-blue accent. Body text passes WCAG AA contrast (>4.5:1) on the dark surface; the primary action button uses dark text on a light-blue button to maintain accessibility (white-on-baby-blue would fail AA at small sizes).
-
-Switching via tray menu **Theme ▶** offers three choices:
-
-- **Light** - force the light palette, ignore system preference
-- **Dark** - force the dark palette
-- **Follow System** (default) - read the Windows registry value `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` (1=Light, 0=Dark)
-
-Switching theme rebuilds the input window the next time it's opened. If the window happens to be visible at the moment you switch, it's left intact so your work isn't yanked out from under you; the switch takes effect on the next open.
-
-The choice is persisted to `config.json` field `theme` (`"light"` / `"dark"` / `"system"`).
-
-### Recurring Tasks
-
-Type a recurring pattern and CalendarTaskAI parses it deterministically, expands the next ~12 weeks of instances, and stores the rule for periodic top-up so the calendar always has 12 weeks of future instances pre-written.
-
-Recognized patterns:
-
-| You type | What gets scheduled |
-|----------|---------------------|
-| `每周一 健身房` | "健身房" every Monday for the next 12 weeks |
-| `每周一三五 健身` | "健身" on every Mon / Wed / Fri |
-| `每周一、三、五 健身` | same, comma-separated |
-| `每周三 上午10-11点 团队会议` | `[10:00-11:00] 团队会议` every Wednesday |
-| `每月15号 交房租` | "交房租" on the 15th of every month |
-| `每月1日 报销` | "报销" on the 1st |
-| `every monday 9am standup` | `[09:00] standup` every Monday |
-| `every fri team review` | "team review" every Friday |
-
-Properties:
-- **Pre-expanded** to ~12 weeks ahead. New instances appear in the confirm view alongside one-shot tasks; you can cancel the whole batch.
-- **Rules saved on confirm only.** The rule isn't recorded to `data/recurring.json` until you click Confirm — cancelled inputs leave no trace.
-- **Top-up at startup.** Each app launch re-expands rules so the rolling 12-week window stays full. Idempotent on a given day; running the app twice doesn't double-write tasks.
-- **Time-of-day works in rule body.** The rule body is run through the time parser, so `每周一 9点 standup` produces instances with `[09:00]` prefix.
-- **Out of scope (for now):** biweekly, ranges across days (`每月1-15号`), `every other Tuesday`. Ask for these if you'd actually use them.
-
-### Supported Time-of-Day Formats
-
-Tasks can include a time hint that gets prefixed onto the task text as `[HH:MM]` (single time) or `[HH:MM-HH:MM]` (range). DesktopCal displays the prefix verbatim.
-
-| You type | Becomes |
-|----------|---------|
-| `9点开会` | `[09:00] 开会` |
-| `9点半开会` | `[09:30] 开会` |
-| `9点45分会议` | `[09:45] 会议` |
-| `上午9点开会` | `[09:00] 开会` |
-| `下午3点开会` | `[15:00] 开会` |
-| `晚上9点睡觉` | `[21:00] 睡觉` |
-| `9-10点 开会` | `[09:00-10:00] 开会` |
-| `下午3-5点 讨论` | `[15:00-17:00] 讨论` |
-| `9:00 daily standup` | `[09:00] daily standup` |
-| `3pm meeting` | `[15:00] meeting` |
-| `9:00-10:30 review` | `[09:00-10:30] review` |
-| `9-11am sprint` | `[09:00-11:00] sprint` |
-
-Time extraction runs after date extraction, so `明天9点开会` resolves to date=tomorrow with task=`[09:00] 开会`. Anything we can't parse confidently is left in the task text untouched (no LLM-generated prefixes — that path was retired to avoid format drift like `[9:00]` without zero-padding).
-
-### Deterministic vs AI Processing
-
-- **Tasks with explicit dates** → Parsed deterministically using regex (no AI call)
-- **Tasks without dates** → Sent to Gemini AI for intelligent scheduling based on your profile, existing tasks, and behavioral patterns
-
-**Example:**
-```
-明天买菜              → Deterministic: assigned to tomorrow
-下周一开会            → Deterministic: assigned to next Monday  
-完成项目报告          → AI decides: considers workload, urgency, profile rules
-```
+**Refresh:**
+DesktopCal caches its display in memory. After a write, it doesn't notice until you switch months in DesktopCal and back. Set `auto_restart_desktopcal: true` to have CalendarTaskAI force-restart DesktopCal after each write (warning: loses unsaved state in DesktopCal's other panels).
 
 ---
 
-## Database
+## Architecture
 
-CalendarTaskAI writes directly to DesktopCal's SQLite database.
+For curious developers. Roughly 25 modules and 6 000 lines of production Python; 197 unit tests.
 
-**Default Path:**
-```
-%APPDATA%\CalendarTask\Db\calendar.db
-```
-
-This path is configurable via `db_path` in `config.json`.
-
-### Data Format
-
-The database uses DesktopCal's schema:
-- **Table:** `item_table`
-- **Key field:** `it_unique_id` - Format: `dkcal_mdays_YYYYMMDD` (e.g., `dkcal_mdays_20260325`)
-- **Content field:** `it_content` - Tasks separated by `\r\n`
-- **Done marker:** Tasks prefixed with `[+]` are marked as completed
-
-**Example content:**
-```
-Buy groceries
-[+]Completed task
-Write report
-```
-
-### Refreshing DesktopCal
-
-After CalendarTaskAI writes tasks, DesktopCal needs to reload:
-- **Switch pages** in DesktopCal (navigate to another month and back)
-- **Or restart** DesktopCal
-
----
-
-## Smart Learning System
-
-CalendarTaskAI learns from your behavior to improve task allocation over time.
-
-### Behavioral Tracking (Automatic)
-
-The system tracks:
-- **Task moves** - When you move a task to a different date, it signals the AI assigned the wrong date
-- **Task deletions** - Deleted tasks suggest misunderstanding of your intent
-- **Completions** - Tasks marked done are positive signals
-- **Rejections** - When you cancel an allocation, rejected tasks are recorded
-
-### Interaction History
-
-Every interaction is logged:
-- Your input text
-- AI's proposed allocation
-- Which tasks you accepted/rejected
-- Your satisfaction rating
-
-This history is included in future AI prompts for context.
-
-### User-Defined Scheduling Rules
-
-Add rules to the `## Scheduling Rules` section in `profile.md`:
-```markdown
-## Scheduling Rules
-- No work tasks on weekends
-- Max 3 tasks per workday
-- Programming tasks in the morning
-- Exercise on Mon/Wed/Fri
-```
-
-### Rating System
-
-Every 10 operations, you're prompted to rate satisfaction (1-5 stars). Low ratings signal the AI to pay more attention to your patterns.
-
----
-
-## Data Files
-
-All runtime data is stored under `%APPDATA%\CalendarTaskAI\`:
-
-```
-%APPDATA%\CalendarTaskAI\
-├─ data\                  user data (config, profile, history)
-│   ├─ config.json
-│   ├─ profile.md
-│   ├─ history.json
-│   └─ pending.json
-└─ logs\
-    └─ app.log            rotating log (1 MB × 5)
-```
-
-This means the same install can run from `%APPDATA%`, `source/repos/`, or a frozen exe and read the same data. Source code itself does not write to its own directory.
-
-| File | Description | Auto-generated |
-|------|-------------|----------------|
-| `config.json` | Configuration settings | Yes (on first run) |
-| `profile.md` | Personal profile and rules | Yes (template) |
-| `history.json` | Interaction history and modifications | Yes |
-| `pending.json` | Offline retry queue for failed requests | Yes |
-
----
-
-## Architecture Overview
-
-### Module Responsibilities
-
-| Module | Purpose |
-|--------|---------|
-| `main.py` | Entry point, routes to GUI or CLI mode |
-| `cli.py` | Command-line interface using Click framework |
-| `ui.py` | Tkinter floating window for task input |
-| `tray.py` | System tray icon and menu management |
-| `task_parser.py` | Deterministic date extraction using regex |
-| `ai_client.py` | Gemini API integration and prompt building |
-| `calendar_db.py` | SQLite operations for DesktopCal database |
-| `profile_manager.py` | Profile loading and editing |
-| `config_manager.py` | Configuration management |
-| `history.py` | Interaction logging and behavioral analysis |
-| `retry_queue.py` | Offline cache for failed API requests |
-| `constants.py` | Shared constants and paths |
-
-### Processing Flow
+### Pipeline
 
 ```
 User Input
     │
     ▼
 ┌─────────────────────────────────────────────┐
-│  task_parser.py (Deterministic)             │
-│  ├─ Split tasks by separators               │
-│  ├─ Extract dates using regex patterns      │
-│  └─ Output: resolved[] + unresolved[]       │
+│  task_parser.preprocess_input               │
+│  ├─ split_tasks                             │
+│  ├─ recurring.parse_recurring_rule          │  → expand 12 weeks
+│  ├─ extract_date  (regex)                   │
+│  └─ extract_time  (regex, separate module)  │
+│  Returns: (resolved, unresolved, pending_recurring)
 └─────────────────────────────────────────────┘
-    │
-    ├── resolved[] ──────────────────────────────┐
-    │   (tasks with explicit dates)              │
-    │                                            │
-    ▼                                            │
-┌─────────────────────────────────────────────┐  │
-│  ai_client.py (Only if unresolved exists)   │  │
-│  ├─ Build prompt with profile, history      │  │
-│  ├─ Call Gemini API                         │  │
-│  └─ Parse JSON response                     │  │
-└─────────────────────────────────────────────┘  │
-    │                                            │
-    ▼                                            │
-┌─────────────────────────────────────────────┐  │
-│  Merge Results                              │◄─┘
-│  resolved[] + ai_results[]                  │
-└─────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│  calendar_db.py                             │
-│  └─ Write to DesktopCal SQLite database     │
-└─────────────────────────────────────────────┘
+    │                  │                  │
+    │ resolved         │ unresolved       │ pending_recurring
+    │                  ▼                  │
+    │      ┌─────────────────────┐        │
+    │      │  ai_client.analyze  │        │
+    │      │  + provider routing │        │
+    │      └──────────┬──────────┘        │
+    ▼                 ▼                   │
+   merge ─────────────────────────────────┤
+                      │                   │
+                      ▼                   ▼
+              calendar_db.write_tasks   recurring.register_rule
+                      │                  (only on user confirm)
+                      ▼
+              DesktopCal calendar.db
 ```
 
-### Threading Model
+### Key modules
 
-```
-┌─────────────────────────────────────────────┐
-│  Main Thread (Tkinter mainloop)             │
-│  ├─ UI rendering and updates                │
-│  ├─ Event handling                          │
-│  └─ Database operations                     │
-└─────────────────────────────────────────────┘
-         │
-         │ root.after(0, callback)
-         ▼
-┌─────────────────────────────────────────────┐
-│  Tray Thread (pystray)                      │
-│  └─ System tray icon and menu               │
-└─────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────┐
-│  Background Thread (per AI call)            │
-│  └─ Gemini API calls (non-blocking)         │
-└─────────────────────────────────────────────┘
-```
+| Module | Purpose |
+|--------|---------|
+| `main.py` | Entry point; routes CLI vs GUI, redirects GUI exe with CLI args to the CLI exe |
+| `cli.py` | Click-based CLI (add/today/next/done/undo/backup/restore/...) |
+| `ui.py` | Tkinter floating input window, theme-aware |
+| `tray.py` | pystray icon + menu (Templates submenu, Theme submenu, Auto-start, Undo) |
+| `setup_wizard.py` | First-run BYOK Tkinter wizard (provider picker, masked key, Test button) |
+| `task_parser.py` | Splits multi-task input, runs date extraction (Chinese + English) |
+| `time_parser.py` | Time-of-day extraction (24h, 12h+AM/PM, 中文 with periods, ranges) |
+| `recurring.py` | Weekly/monthly rule parsing + 12-week pre-expansion + startup top-up |
+| `ai_client.py` | Cross-provider orchestration: provider override, auto-fallback, prompt building |
+| `providers/` | `LLMProvider` ABC + `GeminiProvider` + `DeepSeekProvider` + factory |
+| `calendar_db.py` | SQLite reads/writes against DesktopCal's schema; LIKE-escape, lock retries |
+| `last_op.py` | Records the most recent batch for one-deep undo |
+| `templates.py` | 5 built-in templates + user-defined; tray submenu |
+| `backup.py` | Schema-versioned full-state JSON export / restore |
+| `theme.py` | Light + dark palette tokens; system-pref resolution |
+| `history.py` | Interaction logging + behavioral pattern summary for prompts |
+| `retry_queue.py` | Offline cache of failed AI requests; retried on startup or via CLI |
+| `config_manager.py` | `config.json` load/save; interactive setup |
+| `profile_manager.py` | `profile.md` load/edit |
+| `logger.py` | Rotating file handler under `%APPDATA%\CalendarTaskAI\logs\` |
+| `constants.py` | Centralized paths + DEFAULT_CONFIG |
 
 ---
 
 ## Troubleshooting
 
-### API Key Not Set
+**API key error / "Not configured"**
+Run `python main.py config setup` (or open the GUI for the wizard) and re-enter the key.
 
-**Error:** `Error: API key not configured.`
+**Hotkey not working**
+- Confirm `keyboard` is installed (`pip show keyboard`).
+- Try running as administrator (Windows blocks global hotkey registration for some apps without admin).
+- Change the hotkey in `config.json`: `"hotkey": "ctrl+shift+t"`.
 
-**Solution:** Run `python main.py config setup` and enter your Gemini API key.
+**Database locked**
+Close DesktopCal momentarily; the app retries 3 times with a 0.5 s backoff but can't write while another process holds an exclusive lock.
 
-### Database Locked
+**Tasks appear but DesktopCal doesn't show them**
+DesktopCal caches its in-memory view. Switch to another month and back. Or set `auto_restart_desktopcal: true`.
 
-**Error:** `Database Error: database is locked`
+**Tray icon doesn't appear**
+Pillow + pystray must be installed (`pip install pillow pystray`). Expand the system tray's hidden-icons area; Windows often hides new icons.
 
-**Solution:** 
-- Close DesktopCal temporarily
-- Wait a moment and retry
-- The system has built-in retry logic (3 attempts with 0.5s delay)
+**API rate-limit / quota exhausted**
+The failed request is saved to `pending.json` and retried on next startup. Or run `python main.py retry` after switching to a different provider / waiting out the quota.
 
-### Hotkey Conflict
+**Bundle exe won't launch**
+Right-click `CalendarTaskAI.exe` → Properties → check "Unblock" if present (Windows zone-of-origin protection). Confirm Windows version is 10 or later.
 
-**Error:** `Failed to register hotkey 'ctrl+alt+space'`
+**Where do logs go?**
+`%APPDATA%\CalendarTaskAI\logs\app.log`. Rotated at 1 MB, 5 backups.
 
-**Solutions:**
-- Another application may be using this hotkey
-- Change the hotkey: `python main.py config set hotkey "ctrl+shift+t"`
-- Run as administrator for global hotkey support
+---
 
-### Hotkey Not Working
+## Contributing
 
-**Issue:** Pressing the hotkey does nothing
+Pull requests welcome. The repo follows conventional commits (`feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`) and runs the full test suite on every release tag.
 
-**Solutions:**
-- Ensure `keyboard` module is installed: `pip install keyboard`
-- Try running as administrator
-- Check if another app is capturing the hotkey
+To run tests:
 
-### DesktopCal Not Refreshing
-
-**Issue:** Tasks added but not visible in DesktopCal
-
-**Solution:** Switch to another month and back, or restart DesktopCal. The database is updated immediately, but DesktopCal needs to reload its view.
-
-### API Rate Limits
-
-**Error:** API errors related to rate limiting
-
-**Solution:** 
-- Your requests are automatically saved to the retry queue
-- Run `python main.py retry` later, or wait for the next startup
-
-### Tray Icon Not Showing
-
-**Issue:** Application starts but no tray icon appears
-
-**Solutions:**
-- Ensure `pystray` and `Pillow` are installed
-- Check if the system tray area is visible (expand hidden icons)
-- Restart the application
-
-### Import Errors
-
-**Error:** `ModuleNotFoundError: No module named 'xxx'`
-
-**Solution:** Install all dependencies:
 ```powershell
-pip install google-genai pystray Pillow keyboard click
+pip install -r requirements-dev.txt
+pytest tests/
+```
+
+To build a release locally:
+
+```powershell
+python build_release.py
 ```
 
 ---
 
-## License
+## License & Acknowledgments
 
 MIT. See [LICENSE](LICENSE).
 
-This is an **unofficial** plugin for DesktopCal; it is not affiliated with or endorsed by the DesktopCal authors.
+CalendarTaskAI is an **unofficial** plugin for DesktopCal; it is not affiliated with or endorsed by the DesktopCal authors.
 
----
-
-## Acknowledgments
-
-- [DesktopCal](https://www.desktopcal.com/) - The desktop calendar application
-- [Google Gemini](https://deepmind.google/technologies/gemini/) - AI model for task analysis
-- [pystray](https://github.com/moses-palmer/pystray) - System tray library
-- [Click](https://click.palletsprojects.com/) - CLI framework
+Built on:
+- [DesktopCal](https://www.desktopcal.com/), the calendar app this plugin writes to
+- [Google Gemini](https://deepmind.google/technologies/gemini/) and [DeepSeek](https://platform.deepseek.com/), the supported LLM backends
+- [pystray](https://github.com/moses-palmer/pystray), [keyboard](https://github.com/boppreh/keyboard), [click](https://click.palletsprojects.com/), [Pillow](https://python-pillow.org/), [google-genai](https://github.com/googleapis/python-genai), the dependencies that do the heavy lifting
+- [PyInstaller](https://pyinstaller.org/) for the Windows packaging
