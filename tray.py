@@ -262,15 +262,15 @@ class TrayManager:
                     pystray.MenuItem("(no templates configured)", None, enabled=False)
                 )
 
+            # Closure factory, not a default arg: pystray rejects actions
+            # whose co_argcount exceeds 2, and defaults count toward it.
+            def action_for(txt):
+                return lambda icon, item: self._on_template_selected(txt)
+
             items = []
             for tpl in templates:
                 name = tpl.get("name") or "(unnamed)"
-                text = tpl.get("text", "")
-                # `lambda` capture: bind text via default arg.
-                items.append(pystray.MenuItem(
-                    name,
-                    lambda icon, item, txt=text: self._on_template_selected(txt),
-                ))
+                items.append(pystray.MenuItem(name, action_for(tpl.get("text", ""))))
             return pystray.Menu(*items)
 
         return make_menu()
