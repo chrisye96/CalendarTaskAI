@@ -16,6 +16,8 @@ from logging.handlers import RotatingFileHandler
 
 from constants import LOG_DIR, APP_NAME
 
+LOG_FILE = os.path.join(LOG_DIR, "app.log")
+
 _initialized = False
 
 
@@ -26,7 +28,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         return
 
     os.makedirs(LOG_DIR, exist_ok=True)
-    log_file = os.path.join(LOG_DIR, "app.log")
+    log_file = LOG_FILE
 
     fmt = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
