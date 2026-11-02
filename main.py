@@ -66,6 +66,33 @@ def _show_use_cli_exe_message(args: list[str]) -> None:
     root.destroy()
 
 
+def _report_gui_startup_failure(summary: str) -> None:
+    """Log a fatal GUI-mode error (with traceback if one is active) and show a native error box.
+
+    Under pythonw stdout/stderr are discarded, so without this a startup
+    failure exits with no visible trace. Logging is best-effort so the
+    dialog still appears if the log itself is what broke.
+    """
+    log_file = "%APPDATA%\\CalendarTaskAI\\logs\\app.log"
+    try:
+        from logger import get_logger, LOG_FILE
+        log_file = LOG_FILE
+        get_logger(__name__).error(summary, exc_info=sys.exc_info()[0] is not None)
+    except Exception:
+        pass
+
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        MB_ICONERROR = 0x10
+        ctypes.windll.user32.MessageBoxW(
+            None, f"{summary}\n\nDetails were written to:\n{log_file}", "CalendarTaskAI", MB_ICONERROR
+        )
+    except Exception:
+        pass
+
+
 def main() -> None:
     """Route to CLI or GUI based on arguments."""
     # Initialize logging early so even import-time errors get captured.
@@ -87,7 +114,11 @@ def main() -> None:
     else:
         log.debug("GUI mode invoked")
         _enable_dpi_awareness()
-        start_gui()
+        try:
+            start_gui()
+        except Exception:
+            _report_gui_startup_failure("CalendarTaskAI stopped because of an unexpected error.")
+            sys.exit(1)
 
 
 def _ensure_configured_or_run_wizard() -> bool:
@@ -244,11 +275,15 @@ def check_dependencies() -> bool:
             missing.append(pip_name)
 
     if missing:
-        # Print to stderr so this is visible from a console; logger may not be set up yet.
-        sys.stderr.write("Missing dependencies:\n")
-        for dep in missing:
-            sys.stderr.write(f"  - {dep}\n")
-        sys.stderr.write("\nInstall with: pip install -r requirements.txt\n")
+        msg = (
+            "Missing dependencies:\n"
+            + "".join(f"  - {dep}\n" for dep in missing)
+            + "\nInstall with: pip install -r requirements.txt"
+        )
+        # sys.stderr is None under pythonw, so only write when a console exists.
+        if sys.stderr:
+            sys.stderr.write(msg + "\n")
+        _report_gui_startup_failure(msg)
         return False
     return True
 
