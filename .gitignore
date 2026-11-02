@@ -200,3 +200,13 @@ cython_debug/
 
 # Internal collaboration doc, not for distribution
 PROJECT_DECISIONS.md
+
+# Local-only Chinese-detection tooling (maintainer-only; not for distribution)
+/scripts/check_chinese.py
+/tests/test_check_chinese.py
+
+# Local database dumps
+/db-output-*.json
+
+# Release planning notes stay local
+/docs/release-plans/
