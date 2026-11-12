@@ -1,5 +1,7 @@
 # CalendarTaskAI
 
+**English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
+
 [![v1.0.0 released](https://img.shields.io/badge/v1.0.0-released-brightgreen?logo=github)](https://github.com/chrisye96/CalendarTaskAI/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
